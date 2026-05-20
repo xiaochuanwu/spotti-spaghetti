@@ -1,0 +1,41 @@
+# Version control
+.git
+.gitignore
+
+# Offline analysis files
+analysis/
+anaconda_projects/
+*.ipynb
+requirements.txt
+
+# Editor configuration
+.editorconfig
+.vscode/
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local environment and temporary files
+*.tmp
+*.temp
+.env
+.env.*
+!.env.example
+
+# Node and build output
+node_modules/
+dist/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Docker files not needed inside the build context
+Dockerfile
+.dockerignore
+docker-compose.yml

@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --animate-shimmer: shimmer 2.5s infinite linear;
+  --animate-spin-slow: spin 8s infinite linear;
+  --animate-bounce-slow: bounce-slow 4s infinite ease-in-out;
+  --animate-pulse-slow: pulse-slow 5s infinite ease-in-out;
+  --animate-fade-in-down: fade-in-down 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  --animate-fade-in-up: fade-in-up 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  --animate-fade-in: fade-in 0.3s ease-out forwards;
+  --animate-scale-up: scale-up 0.18s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  --animate-rotate-glow: rotate-glow 10s linear infinite;
+
+  @keyframes rotate-glow {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  @keyframes bounce-slow {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  @keyframes pulse-slow {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.97; transform: scale(1.01); }
+  }
+  @keyframes fade-in-down {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes scale-up {
+    from { opacity: 0; transform: scale(0.98); }
+    to { opacity: 1; transform: scale(1); }
+  }
+}
+
+/* Smooth Theme Transitions */
+html, body, nav, header, footer, main, input, button, table, tr, th, td {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease, box-shadow 0.3s ease;
+}
+
+/* Base Styles */
+html {
+  min-height: 100%;
+  background-color: #f5f5f7;
+}
+html.dark {
+  background-color: #0a0a0c;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: #f5f5f7;
+  color: #1d1d1f;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  overflow-y: scroll;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.dark body {
+  background-color: #0a0a0c;
+  color: #f5f5f7;
+}
+
+/* Custom Minimal Scrollbar */
+::-webkit-scrollbar {
+  width: 8.5px;
+  height: 8.5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c7;
+  border: 2px solid #f5f5f7;
+  border-radius: 4.5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a8af;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #424245;
+  border-color: #0a0a0c;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #68686e;
+}
+
+/* Shimmer Animation Helper */
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.04), transparent);
+  animation: var(--animate-shimmer);
+}
+
+.animate-spin-slow {
+  animation: var(--animate-spin-slow);
+}
+
+/* Form Autofill Fix */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #1d1d1f;
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #ffffff;
+  -webkit-box-shadow: 0 0 0px 1000px #242424 inset;
+}
