@@ -282,6 +282,19 @@ export const spotify = {
     return playlist;
   },
 
+  async searchTracks(query, { limit = 10, offset = 0, market = '' } = {}) {
+    const params = new URLSearchParams({
+      type: 'track',
+      q: query,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    if (market) params.set('market', market);
+
+    const response = await this.apiCall(`https://api.spotify.com/v1/search?${params.toString()}`);
+    return response?.tracks?.items || [];
+  },
+
   // Fetch all playlists (including the saved-tracks virtual playlist)
   async getPlaylists(onStatusChange = null) {
     if (onStatusChange) onStatusChange({ step: 'userProfile' }, 0);

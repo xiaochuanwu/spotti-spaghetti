@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Music, Clock, ExternalLink, Loader2 } from 'lucide-react';
 import { useI18n } from '../i18n';
-import { spotify } from '../services/spotify';
 
 const PREVIEW_PAGE_SIZE = 50;
 
@@ -11,7 +10,7 @@ const getFocusableElements = (node) => (
   ) || []).filter(element => !element.disabled && element.getAttribute('aria-hidden') !== 'true')
 );
 
-export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
+export const PlaylistPreviewModal = ({ isOpen, onClose, playlist, provider }) => {
   const { t } = useI18n();
   const [tracks, setTracks] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -31,7 +30,7 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
   };
 
   useEffect(() => {
-    if (!isOpen || !playlist) return;
+    if (!isOpen || !playlist || !provider) return;
 
     let isCurrentRequest = true;
     const abortController = new AbortController();
@@ -44,7 +43,7 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
       setNextOffset(0);
       setHasMore(false);
       try {
-        const data = await spotify.getPlaylistTracksPreview(playlist, 0, PREVIEW_PAGE_SIZE, {
+        const data = await provider.getPlaylistTracksPreview(playlist, 0, PREVIEW_PAGE_SIZE, {
           signal: abortController.signal,
         });
         if (isCurrentRequest) {
@@ -70,7 +69,7 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
       abortController.abort();
       document.body.style.overflow = origOverflow;
     };
-  }, [isOpen, playlist, t]);
+  }, [isOpen, playlist, provider, t]);
 
   // Escape key event listener
   useEffect(() => {
@@ -113,12 +112,12 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
   const playlistImg = playlist.images && playlist.images.length > 0 ? playlist.images[0].url : null;
 
   const handleLoadMore = async () => {
-    if (isLoadingMore || !hasMore) return;
+    if (isLoadingMore || !hasMore || !provider) return;
 
     setIsLoadingMore(true);
     setError(null);
     try {
-      const data = await spotify.getPlaylistTracksPreview(playlist, nextOffset, PREVIEW_PAGE_SIZE);
+      const data = await provider.getPlaylistTracksPreview(playlist, nextOffset, PREVIEW_PAGE_SIZE);
       setTracks(current => [...current, ...data.tracks]);
       setNextOffset(data.nextOffset);
       setHasMore(data.hasMore);
