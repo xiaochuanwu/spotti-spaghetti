@@ -77,6 +77,7 @@ export const zh = {
   'history.comparePlaylist': '歌单',
   'history.compareCurrent': '当前快照',
   'history.compareBaseline': '基准快照',
+  'history.snapshotCount': (n) => `${n} 份快照`,
   'history.compareAdded': '新增',
   'history.compareRemoved': '移除',
   'history.compareUnchanged': '未变',

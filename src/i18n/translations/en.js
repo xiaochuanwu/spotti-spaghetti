@@ -77,6 +77,7 @@ export const en = {
   'history.comparePlaylist': 'Playlist',
   'history.compareCurrent': 'Current snapshot',
   'history.compareBaseline': 'Baseline snapshot',
+  'history.snapshotCount': (n) => `${n} snapshots`,
   'history.compareAdded': 'Added',
   'history.compareRemoved': 'Removed',
   'history.compareUnchanged': 'Unchanged',

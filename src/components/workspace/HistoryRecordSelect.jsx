@@ -2,7 +2,18 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import { useI18n } from '../../i18n';
 
-export const HistoryRecordSelect = ({ history, selectedId, selectedItem, onChange }) => {
+const defaultGetId = (item) => item.id;
+const defaultGetTitle = (item) => item.playlistName;
+
+export const HistoryRecordSelect = ({
+  getId = defaultGetId,
+  getMeta,
+  getTitle = defaultGetTitle,
+  history,
+  selectedId,
+  selectedItem,
+  onChange,
+}) => {
   const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -13,7 +24,13 @@ export const HistoryRecordSelect = ({ history, selectedId, selectedItem, onChang
   const isDisabled = history.length === 0;
   const activeIndex = Math.max(0, Math.min(highlightedIndex, Math.max(history.length - 1, 0)));
 
-  const getSelectedIndex = () => history.findIndex(item => item.id === selectedId);
+  const getDefaultMeta = (item) => (
+    `${new Date(item.createdAt).toLocaleString()} · ${item.trackCount} ${t('playlists.tracks')}`
+  );
+  const renderMeta = getMeta || getDefaultMeta;
+  const selectedMeta = selectedItem ? renderMeta(selectedItem) : '';
+
+  const getSelectedIndex = () => history.findIndex(item => getId(item) === selectedId);
   const getFallbackIndex = () => {
     const selectedIndex = getSelectedIndex();
     return selectedIndex >= 0 ? selectedIndex : 0;
@@ -35,7 +52,7 @@ export const HistoryRecordSelect = ({ history, selectedId, selectedItem, onChang
   const selectIndex = (index) => {
     const item = history[index];
     if (!item) return;
-    onChange(item.id);
+    onChange(getId(item));
     closeMenu(true);
   };
 
@@ -133,11 +150,11 @@ export const HistoryRecordSelect = ({ history, selectedId, selectedItem, onChang
       >
         <span className="min-w-0">
           <span className="block truncate font-semibold">
-            {selectedItem?.playlistName || t('insights.noHistory')}
+            {selectedItem ? getTitle(selectedItem) : t('insights.noHistory')}
           </span>
-          {selectedItem && (
+          {selectedMeta && (
             <span className="mt-0.5 block truncate text-[11px] font-medium text-[#86868b]">
-              {new Date(selectedItem.createdAt).toLocaleString()} · {selectedItem.trackCount} {t('playlists.tracks')}
+              {selectedMeta}
             </span>
           )}
         </span>
@@ -155,12 +172,14 @@ export const HistoryRecordSelect = ({ history, selectedId, selectedItem, onChang
           className="absolute left-0 right-0 top-full z-30 mt-2 max-h-64 overflow-y-auto rounded-xl border border-[#e5e5e7] dark:border-[#333336] bg-white/95 dark:bg-[#1d1d1f]/95 p-1.5 shadow-xl backdrop-blur-xl animate-fade-in"
         >
           {history.map((item, index) => {
-            const selected = item.id === selectedId;
+            const itemId = getId(item);
+            const selected = itemId === selectedId;
             const highlighted = index === activeIndex;
+            const itemMeta = renderMeta(item);
 
             return (
               <button
-                key={item.id}
+                key={itemId}
                 ref={(node) => { optionRefs.current[index] = node; }}
                 type="button"
                 role="option"
@@ -178,10 +197,12 @@ export const HistoryRecordSelect = ({ history, selectedId, selectedItem, onChang
                 }`}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold">{item.playlistName}</span>
-                  <span className="mt-0.5 block truncate text-[11px] font-medium text-[#86868b]">
-                    {new Date(item.createdAt).toLocaleString()} · {item.trackCount} {t('playlists.tracks')}
-                  </span>
+                  <span className="block truncate text-sm font-semibold">{getTitle(item)}</span>
+                  {itemMeta && (
+                    <span className="mt-0.5 block truncate text-[11px] font-medium text-[#86868b]">
+                      {itemMeta}
+                    </span>
+                  )}
                 </span>
                 {selected && <Check size={15} className="shrink-0" aria-hidden="true" />}
               </button>

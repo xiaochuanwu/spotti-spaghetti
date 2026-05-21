@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Download, Trash2 } from 'lucide-react';
 import { useI18n } from '../../i18n';
 import { exportHistory } from '../../services/exportHistory.js';
+import { HistoryRecordSelect } from './HistoryRecordSelect.jsx';
 
 const formatTrack = (track) => (
   [track.name, track.artistNames].filter(Boolean).join(' · ')
@@ -65,6 +66,9 @@ export const HistoryPanel = ({
   const comparison = currentSnapshot && baselineSnapshot
     ? exportHistory.compare(currentSnapshot, baselineSnapshot)
     : null;
+  const formatSnapshotMeta = (snapshot) => (
+    `${new Date(snapshot.createdAt).toLocaleString()} · ${snapshot.trackCount} ${t('playlists.tracks')}`
+  );
 
   return (
     <div className="mt-4 bg-white dark:bg-[#1d1d1f] border border-[#e5e5e7] dark:border-[#333336]/40 rounded-2xl p-4 shadow-sm dark:shadow-none">
@@ -143,46 +147,38 @@ export const HistoryPanel = ({
         ) : (
           <>
             <div className="mt-3 grid gap-3 md:grid-cols-3">
-              <label className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#86868b]">{t('history.comparePlaylist')}</span>
-                <select
-                  value={effectiveCompareGroup.playlistId}
-                  onChange={(event) => setComparePlaylistId(event.target.value)}
-                  className="rounded-xl border border-[#e5e5e7] dark:border-[#333336] bg-[#fafafa] dark:bg-[#161617] px-3 py-2 text-sm text-[#1d1d1f] dark:text-[#f5f5f7] outline-none focus:border-[#0071e3]"
-                >
-                  {comparableGroups.map(group => (
-                    <option key={group.playlistId} value={group.playlistId}>{group.playlistName}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5">
+                <HistoryRecordSelect
+                  getId={(group) => group.playlistId}
+                  getMeta={(group) => t('history.snapshotCount', group.snapshots.length)}
+                  getTitle={(group) => group.playlistName}
+                  history={comparableGroups}
+                  selectedId={effectiveCompareGroup.playlistId}
+                  selectedItem={effectiveCompareGroup}
+                  onChange={setComparePlaylistId}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#86868b]">{t('history.compareCurrent')}</span>
-                <select
-                  value={currentSnapshot?.id || ''}
-                  onChange={(event) => setCurrentSnapshotId(event.target.value)}
-                  className="rounded-xl border border-[#e5e5e7] dark:border-[#333336] bg-[#fafafa] dark:bg-[#161617] px-3 py-2 text-sm text-[#1d1d1f] dark:text-[#f5f5f7] outline-none focus:border-[#0071e3]"
-                >
-                  {compareSnapshots.map(snapshot => (
-                    <option key={snapshot.id} value={snapshot.id}>
-                      {new Date(snapshot.createdAt).toLocaleString()} · {snapshot.trackCount} {t('playlists.tracks')}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1.5">
+                <HistoryRecordSelect
+                  getMeta={formatSnapshotMeta}
+                  history={compareSnapshots}
+                  selectedId={currentSnapshot?.id || ''}
+                  selectedItem={currentSnapshot}
+                  onChange={setCurrentSnapshotId}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#86868b]">{t('history.compareBaseline')}</span>
-                <select
-                  value={baselineSnapshot?.id || ''}
-                  onChange={(event) => setBaselineSnapshotId(event.target.value)}
-                  className="rounded-xl border border-[#e5e5e7] dark:border-[#333336] bg-[#fafafa] dark:bg-[#161617] px-3 py-2 text-sm text-[#1d1d1f] dark:text-[#f5f5f7] outline-none focus:border-[#0071e3]"
-                >
-                  {compareSnapshots.filter(snapshot => snapshot.id !== currentSnapshot?.id).map(snapshot => (
-                    <option key={snapshot.id} value={snapshot.id}>
-                      {new Date(snapshot.createdAt).toLocaleString()} · {snapshot.trackCount} {t('playlists.tracks')}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <HistoryRecordSelect
+                  getMeta={formatSnapshotMeta}
+                  history={compareSnapshots.filter(snapshot => snapshot.id !== currentSnapshot?.id)}
+                  selectedId={baselineSnapshot?.id || ''}
+                  selectedItem={baselineSnapshot}
+                  onChange={setBaselineSnapshotId}
+                />
+              </div>
             </div>
 
             {comparison && (
