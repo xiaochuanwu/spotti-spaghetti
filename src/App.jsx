@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { spotify } from './services/spotify';
 import { exporter } from './services/exporter';
 import { Header } from './components/Header';
@@ -6,20 +6,30 @@ import { SearchFilter } from './components/SearchFilter';
 import { PlaylistsContainer } from './components/PlaylistsContainer';
 import { ProgressBar } from './components/ProgressBar';
 import { Footer } from './components/Footer';
+import { ConfirmDialog } from './components/ConfirmDialog';
 import { WorkspacePanel } from './components/workspace/WorkspacePanel';
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useI18n } from './i18n';
 import { PlaylistPreviewModal } from './components/PlaylistPreviewModal';
 import { useThemePreference } from './hooks/useThemePreference.js';
 import { batchSession } from './services/batchSession.js';
-import { exportHistory } from './services/exportHistory.js';
+import { exportHistory, getTrackUrisFromSnapshot } from './services/exportHistory.js';
 
 const SPOTIFY_ERROR_KEYS = {
   SPOTIFY_RATE_LIMIT_EXCEEDED: 'error.spotifyRateLimit',
   SPOTIFY_REQUEST_FAILED: 'error.spotifyRequestFailed',
+  SPOTIFY_AUTH_DENIED: 'error.authFailed',
+  SPOTIFY_AUTH_EXCHANGE_FAILED: 'error.authFailed',
+  SPOTIFY_AUTH_EXPIRED: 'error.spotifyAuthExpired',
+  SPOTIFY_AUTH_STATE_MISMATCH: 'error.spotifyAuthStateMismatch',
+  SPOTIFY_PERMISSION_DENIED: 'error.spotifyPermissionDenied',
+  SPOTIFY_REQUEST_CANCELLED: 'error.spotifyRequestCancelled',
   SPOTIFY_USER_PROFILE_UNAVAILABLE: 'error.spotifyUserUnavailable',
   SPOTIFY_PLAYLISTS_UNAVAILABLE: 'error.spotifyPlaylistsUnavailable',
 };
+
+const isAuthExpiredError = (err) => err?.code === 'SPOTIFY_AUTH_EXPIRED';
+const isCancelledError = (err) => err?.code === 'SPOTIFY_REQUEST_CANCELLED';
 
 export default function App() {
   const { t } = useI18n();
@@ -35,6 +45,8 @@ export default function App() {
   const [historySnapshots, setHistorySnapshots] = useState([]);
   const [latestDiff, setLatestDiff] = useState(null);
   const [batchSessionState, setBatchSessionState] = useState(() => batchSession.read());
+  const [confirmation, setConfirmation] = useState(null);
+  const activeExportAbortRef = useRef(null);
   const { setTheme, themePreference } = useThemePreference();
 
   // Single and batch export progress tracking
@@ -43,7 +55,8 @@ export default function App() {
     activePlaylistId: null,
     progress: 0,
     taskName: '',
-    currentItem: ''
+    currentItem: '',
+    canCancel: false,
   });
 
   useEffect(() => {
@@ -68,6 +81,11 @@ export default function App() {
       : playlist
   ), [t]);
 
+  const getErrorText = useCallback((err) => {
+    const key = SPOTIFY_ERROR_KEYS[err?.code || err?.message] || 'error.genericDetail';
+    return t(key);
+  }, [t]);
+
   const loadPlaylists = useCallback(async () => {
     setIsLoadingPlaylists(true);
     setErrorMessage('');
@@ -77,31 +95,38 @@ export default function App() {
       setPlaylists(list);
     } catch (err) {
       console.error(err);
-      setErrorMessage(t('error.loadFailed'));
+      if (isAuthExpiredError(err)) setIsLoggedIn(false);
+      setErrorMessage(isAuthExpiredError(err) ? getErrorText(err) : t('error.loadFailed'));
     } finally {
       setIsLoadingPlaylists(false);
     }
-  }, [t]);
+  }, [getErrorText, t]);
 
   useEffect(() => {
     const initAuth = async () => {
       const hasCode = new URLSearchParams(window.location.search).has('code');
       if (hasCode) {
         setIsLoadingPlaylists(true);
-        const success = await spotify.handleCallback();
-        if (success) {
-          setIsLoggedIn(true);
-        } else {
-          setErrorMessage(t('error.authFailed'));
+        try {
+          const success = await spotify.handleCallback();
+          if (success) {
+            setIsLoggedIn(true);
+          } else {
+            setErrorMessage(t('error.authFailed'));
+          }
+        } catch (err) {
+          console.error(err);
+          setErrorMessage(getErrorText(err));
+        } finally {
+          setIsLoadingPlaylists(false);
         }
-        setIsLoadingPlaylists(false);
       } else {
         const loggedIn = spotify.isLoggedIn();
         setIsLoggedIn(loggedIn);
       }
     };
     initAuth();
-  }, [t]);
+  }, [getErrorText, t]);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -137,11 +162,6 @@ export default function App() {
     return t(`task.${taskInfo.step}`);
   }, [t]);
 
-  const getErrorText = useCallback((err) => {
-    const key = SPOTIFY_ERROR_KEYS[err?.code || err?.message] || 'error.genericDetail';
-    return t(key);
-  }, [t]);
-
   const recordSnapshot = async (playlist, tracks) => {
     const playlistKey = playlist.id || playlist.name;
     const previousSnapshot = await exportHistory.latestForPlaylist(playlistKey);
@@ -156,21 +176,41 @@ export default function App() {
     });
   };
 
+  const closeConfirmation = useCallback(() => {
+    setConfirmation(null);
+  }, []);
+
   const clearHistory = async () => {
-    if (!window.confirm(t('history.clearConfirm'))) return;
-    await exportHistory.clear();
-    setHistorySnapshots([]);
-    setLatestDiff(null);
-    setErrorMessage('');
-    setStatusMessage(t('status.historyCleared'));
+    setConfirmation({
+      title: t('history.clearTitle'),
+      message: t('history.clearConfirm'),
+      confirmLabel: t('history.clear'),
+      destructive: true,
+      onConfirm: async () => {
+        await exportHistory.clear();
+        setHistorySnapshots([]);
+        setLatestDiff(null);
+        setErrorMessage('');
+        setStatusMessage(t('status.historyCleared'));
+      },
+    });
   };
 
   const deleteHistorySnapshot = async (id) => {
-    await exportHistory.deleteSnapshot(id);
-    setHistorySnapshots(await exportHistory.all());
-    setLatestDiff(null);
-    setErrorMessage('');
-    setStatusMessage(t('status.historyDeleted'));
+    const target = historySnapshots.find(item => item.id === id);
+    setConfirmation({
+      title: t('history.deleteTitle'),
+      message: t('history.deleteConfirm', target?.playlistName || t('history.title')),
+      confirmLabel: t('history.delete'),
+      destructive: true,
+      onConfirm: async () => {
+        await exportHistory.deleteSnapshot(id);
+        setHistorySnapshots(await exportHistory.all());
+        setLatestDiff(null);
+        setErrorMessage('');
+        setStatusMessage(t('status.historyDeleted'));
+      },
+    });
   };
 
   const exportLocalHistory = async () => {
@@ -188,13 +228,31 @@ export default function App() {
     setStatusMessage(t('status.historyExported', history.length));
   };
 
+  const importLocalHistory = async (file) => {
+    try {
+      const content = JSON.parse(await file.text());
+      const importedCount = await exportHistory.importSnapshots(content);
+      setHistorySnapshots(await exportHistory.all());
+      setLatestDiff(null);
+      setErrorMessage('');
+      setStatusMessage(t('status.historyImported', importedCount));
+    } catch (err) {
+      console.error(err);
+      setStatusMessage('');
+      setErrorMessage(t('error.historyImportFailed'));
+    }
+  };
+
   const handleExportSingle = async (playlist) => {
+    const abortController = new AbortController();
+    activeExportAbortRef.current = abortController;
     setExportingState({
       isExporting: true,
       activePlaylistId: playlist.id,
       progress: 0,
       taskName: t('task.connecting'),
-      currentItem: playlist.name
+      currentItem: playlist.name,
+      canCancel: true,
     });
     setErrorMessage('');
     setStatusMessage('');
@@ -214,7 +272,8 @@ export default function App() {
             ...prev,
             taskName: t('task.rateLimit', retrySeconds)
           }));
-        }
+        },
+        { signal: abortController.signal }
       );
       
       if (tracks.length > 0) {
@@ -225,16 +284,26 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
-      setErrorMessage(t('error.exportFailed', playlist.name, getErrorText(err)));
+      if (isCancelledError(err)) {
+        setStatusMessage(t('status.exportCancelled'));
+      } else {
+        if (isAuthExpiredError(err)) setIsLoggedIn(false);
+        setErrorMessage(t('error.exportFailed', playlist.name, getErrorText(err)));
+      }
     } finally {
+      if (activeExportAbortRef.current === abortController) {
+        activeExportAbortRef.current = null;
+      }
       setExportingState({
         isExporting: false, activePlaylistId: null,
-        progress: 0, taskName: '', currentItem: ''
+        progress: 0, taskName: '', currentItem: '', canCancel: false
       });
     }
   };
 
   const handleExportAll = async (targetPlaylists = playlists) => {
+    const abortController = new AbortController();
+    activeExportAbortRef.current = abortController;
     const sourceTargets = Array.isArray(targetPlaylists) ? targetPlaylists : playlists;
     const exportTargets = sourceTargets.map(localizePlaylist);
 
@@ -243,7 +312,8 @@ export default function App() {
       activePlaylistId: 'all',
       progress: 0,
       taskName: t('task.preparing'),
-      currentItem: t('task.batchItem')
+      currentItem: t('task.batchItem'),
+      canCancel: true,
     });
     setErrorMessage('');
     setStatusMessage('');
@@ -259,6 +329,10 @@ export default function App() {
       }
 
       for (let i = 0; i < totalPlaylists; i++) {
+        if (abortController.signal.aborted) {
+          throw Object.assign(new Error('SPOTIFY_REQUEST_CANCELLED'), { code: 'SPOTIFY_REQUEST_CANCELLED' });
+        }
+
         const playlist = exportTargets[i];
         
         setExportingState(prev => ({
@@ -285,7 +359,8 @@ export default function App() {
               setExportingState(prev => ({
                 ...prev, taskName: t('task.rateLimitBatch', retrySeconds)
               }));
-            }
+            },
+            { signal: abortController.signal }
           );
 
           if (tracks.length > 0) {
@@ -294,6 +369,9 @@ export default function App() {
           }
         } catch (err) {
           console.error(err);
+          if (isCancelledError(err) || isAuthExpiredError(err)) {
+            throw err;
+          }
           failed.push({ id: playlist.id, name: playlist.name, code: err.code || err.message });
         }
       }
@@ -329,13 +407,31 @@ export default function App() {
     } catch (err) {
       console.error(err);
       setStatusMessage('');
-      setErrorMessage(t('error.batchFailed', getErrorText(err)));
+      if (isCancelledError(err)) {
+        setErrorMessage('');
+        setStatusMessage(t('status.exportCancelled'));
+      } else {
+        if (isAuthExpiredError(err)) setIsLoggedIn(false);
+        setErrorMessage(t('error.batchFailed', getErrorText(err)));
+      }
     } finally {
+      if (activeExportAbortRef.current === abortController) {
+        activeExportAbortRef.current = null;
+      }
       setExportingState({
         isExporting: false, activePlaylistId: null,
-        progress: 0, taskName: '', currentItem: ''
+        progress: 0, taskName: '', currentItem: '', canCancel: false
       });
     }
+  };
+
+  const handleCancelExport = () => {
+    activeExportAbortRef.current?.abort();
+    setExportingState(prev => ({
+      ...prev,
+      taskName: t('task.cancelling'),
+      canCancel: false,
+    }));
   };
 
   const handleRetryFailedBatch = () => {
@@ -355,7 +451,8 @@ export default function App() {
       activePlaylistId: 'restore',
       progress: 0,
       taskName: t('task.restoring'),
-      currentItem: name
+      currentItem: name,
+      canCancel: false,
     });
     setErrorMessage('');
     setStatusMessage('');
@@ -368,14 +465,26 @@ export default function App() {
       return playlist;
     } catch (err) {
       console.error(err);
+      if (isAuthExpiredError(err)) setIsLoggedIn(false);
       setErrorMessage(t('error.restoreFailed', getErrorText(err)));
       throw err;
     } finally {
       setExportingState({
         isExporting: false, activePlaylistId: null,
-        progress: 0, taskName: '', currentItem: ''
+        progress: 0, taskName: '', currentItem: '', canCancel: false
       });
     }
+  };
+
+  const handleRestoreSnapshot = async (snapshot) => {
+    const trackUris = getTrackUrisFromSnapshot(snapshot);
+    if (trackUris.length === 0) {
+      setStatusMessage('');
+      setErrorMessage(t('error.historyRestoreEmpty'));
+      return;
+    }
+
+    await handleRestorePlaylist(t('history.restoreName', snapshot.playlistName), trackUris);
   };
 
   const localizedPlaylists = useMemo(
@@ -436,7 +545,7 @@ export default function App() {
             </div>
           )}
 
-          <ProgressBar exportingState={exportingState} />
+          <ProgressBar exportingState={exportingState} onCancel={handleCancelExport} />
 
           {isLoggedIn ? (
             isLoadingPlaylists ? (
@@ -465,8 +574,10 @@ export default function App() {
                   onClearHistory={clearHistory}
                   onDeleteHistory={deleteHistorySnapshot}
                   onExportHistory={exportLocalHistory}
+                  onImportHistory={importLocalHistory}
                   formatError={getErrorText}
                   onRestorePlaylist={handleRestorePlaylist}
+                  onRestoreSnapshot={handleRestoreSnapshot}
                   onRetryBatch={handleRetryFailedBatch}
                 />
 
@@ -536,6 +647,19 @@ export default function App() {
         isOpen={isPreviewOpen} 
         onClose={() => setIsPreviewOpen(false)} 
         playlist={previewPlaylist} 
+      />
+      <ConfirmDialog
+        isOpen={Boolean(confirmation)}
+        title={confirmation?.title}
+        message={confirmation?.message}
+        confirmLabel={confirmation?.confirmLabel}
+        destructive={confirmation?.destructive}
+        onCancel={closeConfirmation}
+        onConfirm={async () => {
+          const action = confirmation?.onConfirm;
+          closeConfirmation();
+          await action?.();
+        }}
       />
     </div>
   );

@@ -103,7 +103,7 @@ export const parseCSV = (csvText) => {
   return rows.filter(row => row.some(value => value.trim() !== ''));
 };
 
-export const extractTrackUrisFromCSV = (csvText) => {
+export const extractTrackUrisFromCSV = (csvText, { dedupe = true } = {}) => {
   const rows = parseCSV(csvText.replace(/^\uFEFF/, ''));
   if (rows.length < 2) return [];
 
@@ -111,10 +111,10 @@ export const extractTrackUrisFromCSV = (csvText) => {
   const uriIndex = headers.indexOf('track uri');
   if (uriIndex === -1) return [];
 
-  return Array.from(new Set(
-    rows
-      .slice(1)
-      .map(row => row[uriIndex]?.trim())
-      .filter(value => value?.startsWith('spotify:track:'))
-  ));
+  const uris = rows
+    .slice(1)
+    .map(row => row[uriIndex]?.trim())
+    .filter(value => value?.startsWith('spotify:track:'));
+
+  return dedupe ? Array.from(new Set(uris)) : uris;
 };

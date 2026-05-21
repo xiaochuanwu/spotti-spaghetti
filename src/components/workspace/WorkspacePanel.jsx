@@ -28,7 +28,9 @@ export const WorkspacePanel = ({
   onClearHistory,
   onDeleteHistory,
   onExportHistory,
+  onImportHistory,
   onRestorePlaylist,
+  onRestoreSnapshot,
   onRetryBatch,
 }) => {
   const { t } = useI18n();
@@ -89,6 +91,8 @@ export const WorkspacePanel = ({
           onClearHistory={onClearHistory}
           onDeleteHistory={onDeleteHistory}
           onExportHistory={onExportHistory}
+          onImportHistory={onImportHistory}
+          onRestoreSnapshot={onRestoreSnapshot}
         />
       )}
 

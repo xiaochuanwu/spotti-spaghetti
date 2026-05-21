@@ -7,18 +7,31 @@ export const RestorePanel = ({ formatError, isBusy, onRestorePlaylist }) => {
   const [restoreName, setRestoreName] = useState('');
   const [restoreUris, setRestoreUris] = useState([]);
   const [restoreStatus, setRestoreStatus] = useState('');
+  const [dedupeTracks, setDedupeTracks] = useState(false);
+  const [csvText, setCsvText] = useState('');
+
+  const updateRestoreUris = (text, shouldDedupe) => {
+    const uris = extractTrackUrisFromCSV(text, { dedupe: shouldDedupe });
+    setRestoreUris(uris);
+    setRestoreStatus(t(shouldDedupe ? 'restore.loadedDeduped' : 'restore.loaded', uris.length));
+  };
 
   const handleFileChange = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const text = await file.text();
-    const uris = extractTrackUrisFromCSV(text);
-    setRestoreUris(uris);
-    setRestoreStatus(t('restore.loaded', uris.length));
+    setCsvText(text);
+    updateRestoreUris(text, dedupeTracks);
     if (!restoreName) {
       setRestoreName(file.name.replace(/\.csv$/i, ''));
     }
+  };
+
+  const handleDedupeChange = (event) => {
+    const shouldDedupe = event.target.checked;
+    setDedupeTracks(shouldDedupe);
+    if (csvText) updateRestoreUris(csvText, shouldDedupe);
   };
 
   const handleRestore = async () => {
@@ -55,6 +68,15 @@ export const RestorePanel = ({ formatError, isBusy, onRestorePlaylist }) => {
           {t('restore.submit')}
         </button>
       </div>
+      <label className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-[#6e6e73] dark:text-[#a1a1a6]">
+        <input
+          type="checkbox"
+          checked={dedupeTracks}
+          onChange={handleDedupeChange}
+          className="h-4 w-4 rounded border-[#d2d2d7] accent-[#0071e3]"
+        />
+        <span>{t('restore.dedupe')}</span>
+      </label>
       {restoreStatus && <p className="mt-3 text-xs font-medium text-[#6e6e73] dark:text-[#a1a1a6]">{restoreStatus}</p>}
     </div>
   );

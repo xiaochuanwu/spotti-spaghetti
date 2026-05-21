@@ -33,6 +33,29 @@ const compactTrack = (track) => ({
   recordLabel: track.recordLabel,
 });
 
+export const getTrackUrisFromSnapshot = (snapshot) => (
+  (snapshot?.tracks || [])
+    .map(track => track?.uri)
+    .filter(uri => uri?.startsWith('spotify:track:'))
+);
+
+export const normalizeHistorySnapshot = (snapshot, index = 0) => {
+  const playlistName = snapshot?.playlistName || snapshot?.name || 'Imported playlist';
+  const playlistId = snapshot?.playlistId || playlistName;
+  const tracks = Array.isArray(snapshot?.tracks)
+    ? snapshot.tracks.filter(Boolean).map(compactTrack).filter(track => track.uri || track.name)
+    : [];
+
+  return {
+    id: snapshot?.id || `${playlistId}-${snapshot?.createdAt || Date.now()}-${index}`,
+    playlistId,
+    playlistName,
+    createdAt: snapshot?.createdAt || new Date().toISOString(),
+    trackCount: Number.isFinite(snapshot?.trackCount) ? snapshot.trackCount : tracks.length,
+    tracks,
+  };
+};
+
 export const exportHistory = {
   async all() {
     return readHistory();
@@ -76,6 +99,20 @@ export const exportHistory = {
 
   async deleteSnapshot(id) {
     await database.delete(DB_STORES.exportHistory, id);
+  },
+
+  async importSnapshots(input) {
+    const snapshots = Array.isArray(input) ? input : input?.history || input?.snapshots || [];
+    const normalizedSnapshots = snapshots
+      .map(normalizeHistorySnapshot)
+      .filter(snapshot => snapshot.tracks.length > 0);
+
+    await Promise.all(normalizedSnapshots.map(snapshot => (
+      database.put(DB_STORES.exportHistory, snapshot)
+    )));
+    await trimHistory();
+
+    return normalizedSnapshots.length;
   },
 
   async clear() {

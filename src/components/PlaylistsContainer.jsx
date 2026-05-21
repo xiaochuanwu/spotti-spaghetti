@@ -95,6 +95,11 @@ export const PlaylistsContainer = ({
       : <ArrowDown size={12} className="inline ml-1 text-[#0071e3]" />;
   };
 
+  const getAriaSort = (column) => {
+    if (sortColumn !== column) return 'none';
+    return sortDirection === 'asc' ? 'ascending' : 'descending';
+  };
+
   const isGlobalExporting = exportingState.isExporting && exportingState.activePlaylistId === 'all';
 
   const renderGridView = () => {
@@ -121,10 +126,12 @@ export const PlaylistsContainer = ({
                 <span>{t('playlists.select')}</span>
               </label>
 
-              <div 
+              <button
+                type="button"
                 onClick={() => onPreview && onPreview(playlist)}
-                className="relative aspect-square w-full rounded-xl overflow-hidden bg-[#f0f0f2] dark:bg-[#161617] flex items-center justify-center mb-4 cursor-pointer group/cover border border-black/[0.04] dark:border-white/[0.04]"
+                className="relative aspect-square w-full rounded-xl overflow-hidden bg-[#f0f0f2] dark:bg-[#161617] flex items-center justify-center mb-4 cursor-pointer group/cover border border-black/[0.04] dark:border-white/[0.04] p-0"
                 title={t('preview.title')}
+                aria-label={t('preview.openFor', playlist.name)}
               >
                 {imageUrl ? (
                   <img 
@@ -141,7 +148,7 @@ export const PlaylistsContainer = ({
                     {t('preview.title')}
                   </span>
                 </div>
-              </div>
+              </button>
 
               <div className="flex-1 flex flex-col justify-between">
                 <div className="min-w-0">
@@ -212,26 +219,44 @@ export const PlaylistsContainer = ({
               <tr className="text-xs tracking-wider text-[#86868b] uppercase">
                 <th className="p-3 w-12 text-center">{t('playlists.select')}</th>
                 <th className="p-3 w-16 text-center">{t('playlists.col.cover')}</th>
-                <th 
-                  className="p-3 font-semibold cursor-pointer group hover:bg-[#f0f0f2] dark:hover:bg-[#2d2d30] transition-colors"
-                  onClick={() => handleSort('Name')}
+                <th
+                  className="p-0 font-semibold"
+                  aria-sort={getAriaSort('Name')}
                 >
-                  <span>{t('playlists.col.name')}</span>
-                  {renderSortIcon('Name')}
+                  <button
+                    type="button"
+                    onClick={() => handleSort('Name')}
+                    className="group flex w-full items-center p-3 text-left transition-colors hover:bg-[#f0f0f2] dark:hover:bg-[#2d2d30]"
+                  >
+                    <span>{t('playlists.col.name')}</span>
+                    {renderSortIcon('Name')}
+                  </button>
                 </th>
-                <th 
-                  className="p-3 font-semibold cursor-pointer group hover:bg-[#f0f0f2] dark:hover:bg-[#2d2d30] transition-colors"
-                  onClick={() => handleSort('Owner')}
+                <th
+                  className="p-0 font-semibold"
+                  aria-sort={getAriaSort('Owner')}
                 >
-                  <span>{t('playlists.col.owner')}</span>
-                  {renderSortIcon('Owner')}
+                  <button
+                    type="button"
+                    onClick={() => handleSort('Owner')}
+                    className="group flex w-full items-center p-3 text-left transition-colors hover:bg-[#f0f0f2] dark:hover:bg-[#2d2d30]"
+                  >
+                    <span>{t('playlists.col.owner')}</span>
+                    {renderSortIcon('Owner')}
+                  </button>
                 </th>
-                <th 
-                  className="p-3 font-semibold cursor-pointer group hover:bg-[#f0f0f2] dark:hover:bg-[#2d2d30] transition-colors text-center w-28"
-                  onClick={() => handleSort('Tracks')}
+                <th
+                  className="p-0 font-semibold text-center w-28"
+                  aria-sort={getAriaSort('Tracks')}
                 >
-                  <span>{t('playlists.col.tracks')}</span>
-                  {renderSortIcon('Tracks')}
+                  <button
+                    type="button"
+                    onClick={() => handleSort('Tracks')}
+                    className="group flex w-full items-center justify-center p-3 transition-colors hover:bg-[#f0f0f2] dark:hover:bg-[#2d2d30]"
+                  >
+                    <span>{t('playlists.col.tracks')}</span>
+                    {renderSortIcon('Tracks')}
+                  </button>
                 </th>
                 <th className="p-3 text-right w-36">{t('playlists.col.action')}</th>
               </tr>
@@ -257,10 +282,12 @@ export const PlaylistsContainer = ({
                       />
                     </td>
                     <td className="p-2.5 text-center">
-                      <div 
+                      <button
+                        type="button"
                         onClick={() => onPreview && onPreview(playlist)}
-                        className="w-8 h-8 rounded bg-[#f0f0f2] dark:bg-[#161617] border border-neutral-200 dark:border-neutral-800/10 overflow-hidden mx-auto flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
+                        className="w-8 h-8 rounded bg-[#f0f0f2] dark:bg-[#161617] border border-neutral-200 dark:border-neutral-800/10 overflow-hidden mx-auto flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity p-0"
                         title={t('preview.title')}
+                        aria-label={t('preview.openFor', playlist.name)}
                       >
                         {imageUrl ? (
                           <img 
@@ -271,7 +298,7 @@ export const PlaylistsContainer = ({
                         ) : (
                           <Music className="w-3.5 h-3.5 text-[#86868b]" />
                         )}
-                      </div>
+                      </button>
                     </td>
 
                     <td className="p-2.5 font-medium">

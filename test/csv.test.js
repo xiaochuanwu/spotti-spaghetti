@@ -56,4 +56,9 @@ test('parseCSV and extractTrackUrisFromCSV handle quoted values and duplicate UR
     ['spotify:track:1', 'Duplicate', 'Album C'],
   ]);
   assert.deepEqual(extractTrackUrisFromCSV(csv), ['spotify:track:1', 'spotify:track:2']);
+  assert.deepEqual(extractTrackUrisFromCSV(csv, { dedupe: false }), [
+    'spotify:track:1',
+    'spotify:track:2',
+    'spotify:track:1',
+  ]);
 });

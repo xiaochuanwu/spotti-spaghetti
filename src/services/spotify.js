@@ -13,16 +13,64 @@ import {
 } from './spotifyMapper.js';
 
 const MAX_RATE_LIMIT_RETRIES = 4;
+const MAX_CONCURRENT_REQUESTS = 3;
 const authStorage = sessionStorage;
 
 const createSpotifyError = (code, details = {}) => Object.assign(new Error(code), { code, details });
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+let activeRequests = 0;
+const requestQueue = [];
+
+const drainRequestQueue = () => {
+  while (activeRequests < MAX_CONCURRENT_REQUESTS && requestQueue.length > 0) {
+    const { task, resolve, reject } = requestQueue.shift();
+    activeRequests++;
+
+    Promise.resolve()
+      .then(task)
+      .then(resolve, reject)
+      .finally(() => {
+        activeRequests--;
+        drainRequestQueue();
+      });
+  }
+};
+
+const enqueueRequest = (task) => new Promise((resolve, reject) => {
+  requestQueue.push({ task, resolve, reject });
+  drainRequestQueue();
+});
+
+const createRandomString = (length = 48) => {
+  const alphanumeric = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  return crypto.getRandomValues(new Uint8Array(length))
+    .reduce((acc, x) => acc + alphanumeric[x % alphanumeric.length], '');
+};
+
+const readResponseBody = async (response) => {
+  try {
+    return await response.clone().json();
+  } catch {
+    try {
+      return await response.text();
+    } catch {
+      return null;
+    }
+  }
+};
+
+const throwIfAborted = (signal) => {
+  if (signal?.aborted) {
+    throw createSpotifyError('SPOTIFY_REQUEST_CANCELLED');
+  }
+};
 
 export const spotify = {
   // Authorization PKCE Code Flow
   async authorize() {
-    const alphanumeric = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    const codeVerifier = crypto.getRandomValues(new Uint8Array(64))
-      .reduce((acc, x) => acc + alphanumeric[x % alphanumeric.length], "");
+    const codeVerifier = createRandomString(64);
+    const oauthState = createRandomString(48);
     
     const hashed = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier));
     const codeChallenge = btoa(String.fromCharCode(...new Uint8Array(hashed)))
@@ -31,24 +79,38 @@ export const spotify = {
       .replace(/\//g, '_');
 
     authStorage.setItem(STORAGE_KEYS.codeVerifier, codeVerifier);
+    authStorage.setItem(STORAGE_KEYS.oauthState, oauthState);
     const clientId = getSpotifyClientId();
     
     window.location = "https://accounts.spotify.com/authorize?client_id=" + clientId +
       "&redirect_uri=" + encodeURIComponent(SPOTIFY_CONFIG.redirectUri) +
       "&scope=" + encodeURIComponent(SPOTIFY_CONFIG.scopes) +
       "&response_type=code&code_challenge_method=S256&code_challenge=" + codeChallenge +
+      "&state=" + encodeURIComponent(oauthState) +
       "&show_dialog=true";
   },
 
   // Token exchange after redirect
   async handleCallback() {
-    const code = new URLSearchParams(window.location.search).get('code');
-    if (!code) return false;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const returnedState = params.get('state');
+    const authError = params.get('error');
+    if (!code && !authError) return false;
 
     // Clear code from URL immediately for clean address bar
-    window.history.replaceState({}, '', '/');
+    window.history.replaceState({}, '', window.location.pathname || '/');
 
     try {
+      if (authError) {
+        throw createSpotifyError('SPOTIFY_AUTH_DENIED', { authError });
+      }
+
+      const expectedState = authStorage.getItem(STORAGE_KEYS.oauthState);
+      if (!expectedState || returnedState !== expectedState) {
+        throw createSpotifyError('SPOTIFY_AUTH_STATE_MISMATCH');
+      }
+
       const clientId = getSpotifyClientId();
       const response = await fetch("https://accounts.spotify.com/api/token", {
         method: 'POST',
@@ -67,15 +129,21 @@ export const spotify = {
         if (tokenData.access_token) {
           authStorage.setItem(STORAGE_KEYS.accessToken, tokenData.access_token);
           authStorage.setItem(STORAGE_KEYS.accessTokenTimestamp, Date.now().toString());
+          authStorage.removeItem(STORAGE_KEYS.codeVerifier);
+          authStorage.removeItem(STORAGE_KEYS.oauthState);
           return true;
         }
       }
-      this.clearAuth();
-      return false;
+      const payload = await readResponseBody(response);
+      throw createSpotifyError('SPOTIFY_AUTH_EXCHANGE_FAILED', {
+        status: response.status,
+        statusText: response.statusText,
+        payload,
+      });
     } catch (error) {
       console.error('Failed to exchange authorization code:', error);
       this.clearAuth();
-      return false;
+      throw error;
     }
   },
 
@@ -97,16 +165,27 @@ export const spotify = {
     authStorage.removeItem(STORAGE_KEYS.accessToken);
     authStorage.removeItem(STORAGE_KEYS.accessTokenTimestamp);
     authStorage.removeItem(STORAGE_KEYS.codeVerifier);
+    authStorage.removeItem(STORAGE_KEYS.oauthState);
   },
 
   // Base API calling helper
   async apiCall(url, delay = 0, onRateLimit = null, retryCount = 0, options = {}) {
+    return enqueueRequest(() => this.apiRequest(url, delay, onRateLimit, retryCount, options));
+  },
+
+  async apiRequest(url, delay = 0, onRateLimit = null, retryCount = 0, options = {}) {
+    throwIfAborted(options.signal);
+
     if (delay > 0) {
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await wait(delay);
     }
 
     try {
       const token = authStorage.getItem(STORAGE_KEYS.accessToken);
+      if (!token) {
+        throw createSpotifyError('SPOTIFY_AUTH_EXPIRED');
+      }
+
       const response = await fetch(url, {
         method: options.method || 'GET',
         headers: {
@@ -115,6 +194,7 @@ export const spotify = {
           ...(options.headers || {}),
         },
         body: options.body,
+        signal: options.signal,
       });
 
       if (response.ok) {
@@ -123,10 +203,8 @@ export const spotify = {
       }
 
       if (response.status === 401) {
-        // Token expired
         this.clearAuth();
-        window.location.href = window.location.origin;
-        return null;
+        throw createSpotifyError('SPOTIFY_AUTH_EXPIRED', { status: response.status });
       }
 
       if (response.status === 429) {
@@ -139,14 +217,27 @@ export const spotify = {
           onRateLimit(retryAfter);
         }
         console.warn(`Rate limit hit. Retrying in ${retryAfter}s...`);
-        return await this.apiCall(url, retryAfter * 1000, onRateLimit, retryCount + 1, options);
+        return await this.apiRequest(url, retryAfter * 1000, onRateLimit, retryCount + 1, options);
+      }
+
+      const payload = await readResponseBody(response);
+      if (response.status === 403) {
+        throw createSpotifyError('SPOTIFY_PERMISSION_DENIED', {
+          status: response.status,
+          statusText: response.statusText,
+          payload,
+        });
       }
 
       throw createSpotifyError('SPOTIFY_REQUEST_FAILED', {
         status: response.status,
         statusText: response.statusText,
+        payload,
       });
     } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw createSpotifyError('SPOTIFY_REQUEST_CANCELLED');
+      }
       console.error(`API Call error for ${url}:`, error);
       throw error;
     }
@@ -249,7 +340,7 @@ export const spotify = {
 
   // Fetch tracks, artist genres, and album labels for a given playlist
   // Report detailed progress using `onProgress(percentage, stepDescription)`
-  async getPlaylistTracks(playlist, onProgress = null, onRateLimit = null) {
+  async getPlaylistTracks(playlist, onProgress = null, onRateLimit = null, options = {}) {
     const isLiked = playlist.id === 'liked_songs';
     const limit = isLiked ? 50 : 100; // Liked songs limit is max 50
     const total = playlist.tracks.total;
@@ -261,6 +352,7 @@ export const spotify = {
     // Step 1: Fetch tracks in pages
     const pageCount = Math.ceil(total / limit);
     for (let i = 0; i < pageCount; i++) {
+      throwIfAborted(options.signal);
       const offset = i * limit;
       if (onProgress) {
         onProgress(
@@ -270,7 +362,7 @@ export const spotify = {
       }
       
       // Stagger requests slightly to avoid rate limit spikes
-      const res = await this.apiCall(`${playlist.tracks.href}?offset=${offset}&limit=${limit}`, i * 50, onRateLimit);
+      const res = await this.apiCall(`${playlist.tracks.href}?offset=${offset}&limit=${limit}`, i * 50, onRateLimit, 0, options);
       if (res && res.items) {
         tracks.push(...res.items.map(mapPlaylistTrackItem).filter(Boolean));
       }
@@ -284,7 +376,7 @@ export const spotify = {
     const artistChunks = chunkArray(artistIds, 50);
 
     const artistRequests = artistChunks.map((chunk, index) => 
-      this.apiCall(`https://api.spotify.com/v1/artists?ids=${chunk.join(',')}`, index * 100, onRateLimit)
+      this.apiCall(`https://api.spotify.com/v1/artists?ids=${chunk.join(',')}`, index * 100, onRateLimit, 0, options)
         .then(res => {
           Object.assign(artistGenres, mapArtistGenres(res?.artists));
         })
@@ -297,7 +389,7 @@ export const spotify = {
     const albumChunks = chunkArray(albumIds, 20);
 
     const albumRequests = albumChunks.map((chunk, index) => 
-      this.apiCall(`https://api.spotify.com/v1/albums?ids=${chunk.join(',')}`, index * 120, onRateLimit)
+      this.apiCall(`https://api.spotify.com/v1/albums?ids=${chunk.join(',')}`, index * 120, onRateLimit, 0, options)
         .then(res => {
           Object.assign(albumLabels, mapAlbumLabels(res?.albums));
         })
@@ -312,13 +404,23 @@ export const spotify = {
     return enrichedTracks;
   },
 
-  // Fetch a preview page of tracks (up to 50 tracks) for modal display
-  async getPlaylistTracksPreview(playlist) {
-    const limit = 50;
-    const url = `${playlist.tracks.href}?offset=0&limit=${limit}`;
-    const res = await this.apiCall(url);
-    if (!res || !res.items) return [];
+  // Fetch a preview page of tracks for modal display
+  async getPlaylistTracksPreview(playlist, offset = 0, limit = 50, options = {}) {
+    const url = `${playlist.tracks.href}?offset=${offset}&limit=${limit}`;
+    const res = await this.apiCall(url, 0, null, 0, options);
+    if (!res || !res.items) {
+      return { tracks: [], total: playlist.tracks?.total || 0, nextOffset: offset, hasMore: false };
+    }
     
-    return res.items.map(mapPreviewTrackItem).filter(Boolean);
+    const tracks = res.items.map(mapPreviewTrackItem).filter(Boolean);
+    const total = res.total ?? playlist.tracks?.total ?? tracks.length;
+    const nextOffset = offset + res.items.length;
+
+    return {
+      tracks,
+      total,
+      nextOffset,
+      hasMore: Boolean(res.next) || nextOffset < total,
+    };
   }
 };

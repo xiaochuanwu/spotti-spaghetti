@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   accessTokenTimestamp: `${STORAGE_NAMESPACE}:access-token-timestamp`,
   codeVerifier: `${STORAGE_NAMESPACE}:code-verifier`,
   language: `${STORAGE_NAMESPACE}:language`,
+  oauthState: `${STORAGE_NAMESPACE}:oauth-state`,
   resumeBatch: `${STORAGE_NAMESPACE}:resume-batch`,
   theme: `${STORAGE_NAMESPACE}:theme`,
 };

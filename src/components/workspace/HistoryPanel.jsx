@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Download, Trash2 } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { Download, RotateCcw, Trash2, Upload } from 'lucide-react';
 import { useI18n } from '../../i18n';
 import { exportHistory } from '../../services/exportHistory.js';
 import { HistoryRecordSelect } from './HistoryRecordSelect.jsx';
@@ -32,11 +32,14 @@ export const HistoryPanel = ({
   onClearHistory,
   onDeleteHistory,
   onExportHistory,
+  onImportHistory,
+  onRestoreSnapshot,
 }) => {
   const { t } = useI18n();
   const [comparePlaylistId, setComparePlaylistId] = useState('');
   const [currentSnapshotId, setCurrentSnapshotId] = useState('');
   const [baselineSnapshotId, setBaselineSnapshotId] = useState('');
+  const importInputRef = useRef(null);
   const latestHistory = history.slice(0, 6);
 
   const comparableGroups = useMemo(() => {
@@ -72,12 +75,32 @@ export const HistoryPanel = ({
 
   return (
     <div className="mt-4 bg-white dark:bg-[#1d1d1f] border border-[#e5e5e7] dark:border-[#333336]/40 rounded-2xl p-4 shadow-sm dark:shadow-none">
-      <div className="flex items-center justify-between mb-3">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">{t('history.title')}</h3>
           <p className="mt-1 text-[11px] font-medium text-[#86868b]">{t('history.localNote')}</p>
         </div>
-        {history.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="sr-only"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) onImportHistory(file);
+              event.target.value = '';
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => importInputRef.current?.click()}
+            className="inline-flex items-center gap-1 rounded-full bg-[#e8e8ed] px-3 py-1.5 text-xs font-bold text-[#0071e3] hover:bg-[#0071e3] hover:text-white dark:bg-[#2d2d30]"
+          >
+            <Upload size={12} />
+            <span>{t('history.importLocal')}</span>
+          </button>
+          {history.length > 0 && (
           <div className="flex items-center gap-2">
             <button
               onClick={onExportHistory}
@@ -90,7 +113,8 @@ export const HistoryPanel = ({
               {t('history.clear')}
             </button>
           </div>
-        )}
+          )}
+        </div>
       </div>
       {latestDiff && (
         <div className="mb-3 rounded-xl bg-[#f0f5ff] dark:bg-[#161617] border border-[#0071e3]/20 px-3 py-2">
@@ -124,6 +148,13 @@ export const HistoryPanel = ({
                   className="min-w-14 rounded-full bg-[#e8e8ed] px-3 py-1 text-[11px] font-bold text-[#0071e3] hover:bg-[#0071e3] hover:text-white dark:bg-[#2d2d30]"
                 >
                   {t('history.analyze')}
+                </button>
+                <button
+                  onClick={() => onRestoreSnapshot(item)}
+                  className="inline-flex min-w-14 items-center gap-1 rounded-full bg-[#e8e8ed] px-3 py-1 text-[11px] font-bold text-[#0071e3] hover:bg-[#0071e3] hover:text-white dark:bg-[#2d2d30]"
+                >
+                  <RotateCcw size={12} aria-hidden="true" />
+                  <span>{t('history.restore')}</span>
                 </button>
                 <button
                   onClick={() => onDeleteHistory(item.id)}

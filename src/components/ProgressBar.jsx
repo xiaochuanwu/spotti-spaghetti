@@ -1,9 +1,9 @@
-import { Loader2, CheckCircle2 } from 'lucide-react';
+import { Loader2, CheckCircle2, X } from 'lucide-react';
 import { useI18n } from '../i18n';
 
-export const ProgressBar = ({ exportingState }) => {
+export const ProgressBar = ({ exportingState, onCancel }) => {
   const { t } = useI18n();
-  const { isExporting, activePlaylistId, currentItem, progress, taskName } = exportingState;
+  const { canCancel, isExporting, activePlaylistId, currentItem, progress, taskName } = exportingState;
 
   if (!isExporting) return null;
 
@@ -27,9 +27,21 @@ export const ProgressBar = ({ exportingState }) => {
             {title}
           </span>
         </div>
-        <span className="text-xs font-bold text-[#0071e3]">
-          {progress}%
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-[#0071e3]">
+            {progress}%
+          </span>
+          {canCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-full p-1 text-[#86868b] transition-colors hover:bg-[#f5f5f7] hover:text-[#1d1d1f] dark:hover:bg-[#2d2d30] dark:hover:text-[#f5f5f7]"
+              aria-label={t('progress.cancel')}
+            >
+              <X size={13} aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Thin Apple Progress Track */}

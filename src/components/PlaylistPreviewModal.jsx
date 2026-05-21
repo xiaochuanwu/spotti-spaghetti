@@ -1,13 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Music, Clock, ExternalLink, Loader2 } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { spotify } from '../services/spotify';
+
+const PREVIEW_PAGE_SIZE = 50;
+
+const getFocusableElements = (node) => (
+  Array.from(node?.querySelectorAll(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  ) || []).filter(element => !element.disabled && element.getAttribute('aria-hidden') !== 'true')
+);
 
 export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
   const { t } = useI18n();
   const [tracks, setTracks] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState(null);
+  const [nextOffset, setNextOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
 
   // Helper to format ms to mm:ss
   const formatDuration = (ms) => {
@@ -21,18 +34,27 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
     if (!isOpen || !playlist) return;
 
     let isCurrentRequest = true;
+    const abortController = new AbortController();
 
     // Fetch preview tracks
     const fetchPreviewTracks = async () => {
       setIsLoading(true);
       setError(null);
       setTracks([]);
+      setNextOffset(0);
+      setHasMore(false);
       try {
-        const data = await spotify.getPlaylistTracksPreview(playlist);
-        if (isCurrentRequest) setTracks(data);
+        const data = await spotify.getPlaylistTracksPreview(playlist, 0, PREVIEW_PAGE_SIZE, {
+          signal: abortController.signal,
+        });
+        if (isCurrentRequest) {
+          setTracks(data.tracks);
+          setNextOffset(data.nextOffset);
+          setHasMore(data.hasMore);
+        }
       } catch (err) {
         console.error('Failed to load preview:', err);
-        if (isCurrentRequest) setError(t('preview.loadFailed'));
+        if (isCurrentRequest && err?.code !== 'SPOTIFY_REQUEST_CANCELLED') setError(t('preview.loadFailed'));
       } finally {
         if (isCurrentRequest) setIsLoading(false);
       }
@@ -45,24 +67,68 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
     document.body.style.overflow = 'hidden';
     return () => {
       isCurrentRequest = false;
+      abortController.abort();
       document.body.style.overflow = origOverflow;
     };
   }, [isOpen, playlist, t]);
 
   // Escape key event listener
   useEffect(() => {
+    if (!isOpen) return undefined;
+    const previousActiveElement = document.activeElement;
+    window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (e.key !== 'Tab') return;
+
+      const focusableElements = getFocusableElements(dialogRef.current);
+      if (focusableElements.length === 0) return;
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (e.shiftKey && document.activeElement === firstElement) {
+        e.preventDefault();
+        lastElement.focus();
+      } else if (!e.shiftKey && document.activeElement === lastElement) {
+        e.preventDefault();
+        firstElement.focus();
+      }
     };
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-    }
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      previousActiveElement?.focus?.();
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen || !playlist) return null;
 
   const playlistImg = playlist.images && playlist.images.length > 0 ? playlist.images[0].url : null;
+
+  const handleLoadMore = async () => {
+    if (isLoadingMore || !hasMore) return;
+
+    setIsLoadingMore(true);
+    setError(null);
+    try {
+      const data = await spotify.getPlaylistTracksPreview(playlist, nextOffset, PREVIEW_PAGE_SIZE);
+      setTracks(current => [...current, ...data.tracks]);
+      setNextOffset(data.nextOffset);
+      setHasMore(data.hasMore);
+    } catch (err) {
+      console.error('Failed to load more preview tracks:', err);
+      setError(t('preview.loadFailed'));
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   return (
     <div 
@@ -72,7 +138,8 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
       aria-modal="true"
       aria-labelledby="playlist-preview-title"
     >
-      <div 
+      <div
+        ref={dialogRef}
         className="bg-white/95 dark:bg-[#1c1c1e]/95 border border-[#e5e5e7] dark:border-[#333336] rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-scale-up"
         onClick={(e) => e.stopPropagation()}
       >
@@ -96,6 +163,7 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
             </div>
           </div>
           <button 
+            ref={closeButtonRef}
             onClick={onClose}
             aria-label={t('preview.close')}
             className="w-7 h-7 rounded-full bg-[#f5f5f7] dark:bg-[#2d2d30] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] flex items-center justify-center cursor-pointer transition-all active:scale-90"
@@ -133,7 +201,7 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
               {/* Tracks List */}
               {tracks.map((track, index) => (
                 <div 
-                  key={track.id || index}
+                  key={`${track.id || track.externalUrl || track.name}-${index}`}
                   className="flex items-center text-xs text-[#1d1d1f] dark:text-[#f5f5f7] px-2 py-2.5 rounded-xl hover:bg-black/[0.03] dark:hover:bg-white/[0.03] transition-colors group"
                 >
                   {/* Index/Art */}
@@ -184,6 +252,19 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
                   </div>
                 </div>
               ))}
+              {hasMore && (
+                <div className="flex justify-center pt-3">
+                  <button
+                    type="button"
+                    onClick={handleLoadMore}
+                    disabled={isLoadingMore}
+                    className="inline-flex items-center gap-2 rounded-full bg-[#e8e8ed] px-4 py-2 text-xs font-bold text-[#0071e3] transition-colors hover:bg-[#0071e3] hover:text-white disabled:text-[#86868b] dark:bg-[#2d2d30]"
+                  >
+                    {isLoadingMore && <Loader2 size={13} className="animate-spin" aria-hidden="true" />}
+                    <span>{t('preview.loadMore')}</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -191,7 +272,7 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
         {/* Modal Footer */}
         <div className="bg-[#fafafa] dark:bg-[#1c1c1e] p-4 flex flex-col sm:flex-row items-center justify-between border-t border-[#e5e5e7] dark:border-[#333336]/60 gap-4">
           <span className="text-[11px] font-medium text-[#86868b]">
-            {t('preview.limit')}
+            {t('preview.loaded', tracks.length, playlist.tracks?.total || tracks.length)}
           </span>
           <button 
             onClick={onClose}
