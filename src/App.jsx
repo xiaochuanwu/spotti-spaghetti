@@ -163,8 +163,7 @@ export default function App() {
   }, [t]);
 
   const recordSnapshot = async (playlist, tracks) => {
-    const playlistKey = playlist.id || playlist.name;
-    const previousSnapshot = await exportHistory.latestForPlaylist(playlistKey);
+    const previousSnapshot = await exportHistory.latestForPlaylist(playlist);
     const snapshot = await exportHistory.addSnapshot(playlist, tracks);
     const diff = exportHistory.compare(snapshot, previousSnapshot);
     setHistorySnapshots(await exportHistory.all());

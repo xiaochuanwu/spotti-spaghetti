@@ -95,6 +95,7 @@ export const en = {
   'history.compareRemoved': 'Removed',
   'history.compareUnchanged': 'Unchanged',
   'history.compareNone': 'None',
+  'history.isrc': (isrc) => `ISRC ${isrc}`,
   'insights.sourceHistory': 'Analyze export record',
   'insights.currentRecord': 'Current analysis',
   'insights.noHistory': 'No export records',

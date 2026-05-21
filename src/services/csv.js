@@ -1,3 +1,5 @@
+import { formatExplicit, formatList, normalizeTrack } from './musicModel.js';
+
 export const CSV_HEADERS = [
   'Track URI',
   'Track Name',
@@ -10,7 +12,11 @@ export const CSV_HEADERS = [
   'Added By',
   'Added At',
   'Genres',
-  'Record Label'
+  'Record Label',
+  'Provider',
+  'Provider Track ID',
+  'Provider Playlist ID',
+  'ISRC'
 ];
 
 export const escapeCSV = (val) => {
@@ -25,20 +31,28 @@ export const escapeCSV = (val) => {
 };
 
 export const toCSV = (tracks) => {
-  const rows = tracks.map(track => [
-    track.uri,
-    track.name,
-    track.albumName,
-    track.artistNames,
-    track.releaseDate,
-    track.durationMs,
-    track.popularity,
-    track.explicit,
-    track.addedBy,
-    track.addedAt,
-    track.genres,
-    track.recordLabel
-  ]);
+  const rows = tracks.map((track) => {
+    const normalizedTrack = normalizeTrack(track);
+
+    return [
+      normalizedTrack.uri,
+      normalizedTrack.name,
+      normalizedTrack.albumName,
+      normalizedTrack.artistNames,
+      normalizedTrack.releaseDate,
+      normalizedTrack.durationMs,
+      normalizedTrack.popularity,
+      formatExplicit(normalizedTrack.explicit),
+      normalizedTrack.addedBy,
+      normalizedTrack.addedAt,
+      formatList(normalizedTrack.genres),
+      normalizedTrack.recordLabel,
+      normalizedTrack.provider,
+      normalizedTrack.providerTrackId,
+      normalizedTrack.providerPlaylistId,
+      normalizedTrack.isrc
+    ];
+  });
 
   return [
     CSV_HEADERS.join(','),
@@ -103,17 +117,45 @@ export const parseCSV = (csvText) => {
   return rows.filter(row => row.some(value => value.trim() !== ''));
 };
 
-export const extractTrackUrisFromCSV = (csvText, { dedupe = true } = {}) => {
+const getColumnValue = (row, headerIndex, headerName) => {
+  const index = headerIndex.get(headerName);
+  return index === undefined ? '' : row[index]?.trim() || '';
+};
+
+export const parseTracksFromCSV = (csvText) => {
   const rows = parseCSV(csvText.replace(/^\uFEFF/, ''));
   if (rows.length < 2) return [];
 
   const headers = rows[0].map(header => header.trim().toLowerCase());
-  const uriIndex = headers.indexOf('track uri');
-  if (uriIndex === -1) return [];
+  const headerIndex = new Map(headers.map((header, index) => [header, index]));
 
-  const uris = rows
+  return rows
     .slice(1)
-    .map(row => row[uriIndex]?.trim())
+    .map(row => normalizeTrack({
+      uri: getColumnValue(row, headerIndex, 'track uri'),
+      name: getColumnValue(row, headerIndex, 'track name'),
+      albumName: getColumnValue(row, headerIndex, 'album name'),
+      artistNames: getColumnValue(row, headerIndex, 'artist name(s)'),
+      releaseDate: getColumnValue(row, headerIndex, 'release date'),
+      durationMs: getColumnValue(row, headerIndex, 'duration (ms)'),
+      popularity: getColumnValue(row, headerIndex, 'popularity'),
+      explicit: getColumnValue(row, headerIndex, 'explicit'),
+      addedBy: getColumnValue(row, headerIndex, 'added by'),
+      addedAt: getColumnValue(row, headerIndex, 'added at'),
+      genres: getColumnValue(row, headerIndex, 'genres'),
+      recordLabel: getColumnValue(row, headerIndex, 'record label'),
+      provider: getColumnValue(row, headerIndex, 'provider'),
+      providerTrackId: getColumnValue(row, headerIndex, 'provider track id'),
+      providerPlaylistId: getColumnValue(row, headerIndex, 'provider playlist id'),
+      isrc: getColumnValue(row, headerIndex, 'isrc'),
+    }))
+    .filter(track => track.uri || track.providerTrackId || track.name);
+
+};
+
+export const extractTrackUrisFromCSV = (csvText, { dedupe = true } = {}) => {
+  const uris = parseTracksFromCSV(csvText)
+    .map(track => track.uri)
     .filter(value => value?.startsWith('spotify:track:'));
 
   return dedupe ? Array.from(new Set(uris)) : uris;

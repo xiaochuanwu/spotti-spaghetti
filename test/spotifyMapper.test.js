@@ -35,17 +35,22 @@ const spotifyTrackItem = {
     duration_ms: 215000,
     popularity: 77,
     explicit: true,
+    external_ids: { isrc: 'USRC17607839' },
     external_urls: { spotify: 'https://open.spotify.com/track/1' },
   },
 };
 
 test('mapPlaylistTrackItem normalizes Spotify playlist items for export', () => {
   assert.deepEqual(mapPlaylistTrackItem(spotifyTrackItem), {
+    provider: 'spotify',
+    providerTrackId: 'track-1',
+    providerPlaylistId: '',
     artists: ['artist-1', 'artist-2'],
     artistNames: ['Artist One', 'Artist Two'],
     albumId: 'album-1',
     albumName: 'Test Album',
     uri: 'spotify:track:1',
+    isrc: 'USRC17607839',
     name: 'Test Track',
     releaseDate: '2026-05-20',
     durationMs: 215000,
@@ -88,18 +93,28 @@ test('enrichTracksWithMetadata maps genres and record labels back to CSV fields'
 
   assert.deepEqual(enrichTracksWithMetadata([track], artistGenres, albumLabels), [
     {
+      modelVersion: 1,
+      provider: 'spotify',
+      providerTrackId: 'track-1',
+      providerPlaylistId: '',
       uri: 'spotify:track:1',
+      isrc: 'USRC17607839',
       name: 'Test Track',
+      artists: ['Artist One', 'Artist Two'],
       albumName: 'Test Album',
+      album: { providerAlbumId: 'album-1', name: 'Test Album' },
       artistNames: 'Artist One,Artist Two',
       releaseDate: '2026-05-20',
       durationMs: 215000,
       popularity: 77,
       explicit: 'Yes',
+      explicitLabel: 'Yes',
       addedBy: 'owner-1',
       addedAt: '2026-05-20T10:00:00Z',
-      genres: 'pop,dance,indie',
+      genres: ['pop', 'dance', 'indie'],
+      genreNames: 'pop,dance,indie',
       recordLabel: 'Test Label',
+      rawSource: null,
     },
   ]);
 });

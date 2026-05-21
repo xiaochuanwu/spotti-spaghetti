@@ -364,7 +364,7 @@ export const spotify = {
       // Stagger requests slightly to avoid rate limit spikes
       const res = await this.apiCall(`${playlist.tracks.href}?offset=${offset}&limit=${limit}`, i * 50, onRateLimit, 0, options);
       if (res && res.items) {
-        tracks.push(...res.items.map(mapPlaylistTrackItem).filter(Boolean));
+        tracks.push(...res.items.map(item => mapPlaylistTrackItem(item, playlist)).filter(Boolean));
       }
     }
 

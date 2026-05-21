@@ -1,3 +1,5 @@
+import { getTrackIdentity, normalizeTrack } from './musicModel.js';
+
 const countValues = (items, selector) => {
   const counts = new Map();
 
@@ -62,8 +64,8 @@ const getPopularityBuckets = (tracks) => {
 };
 
 export const buildInsights = (history) => {
-  const tracks = history.flatMap(snapshot => snapshot.tracks || []);
-  const uniqueTracks = Array.from(new Map(tracks.map(track => [track.uri, track])).values());
+  const tracks = history.flatMap(snapshot => snapshot.tracks || []).map(track => normalizeTrack(track));
+  const uniqueTracks = Array.from(new Map(tracks.map(track => [getTrackIdentity(track), track])).values());
   const trackCount = uniqueTracks.length;
 
   if (trackCount === 0) {
@@ -100,13 +102,13 @@ export const buildInsights = (history) => {
     .map(track => Number(track.popularity))
     .filter(value => Number.isFinite(value));
 
-  const explicitCount = uniqueTracks.filter(track => track.explicit === 'Yes').length;
+  const explicitCount = uniqueTracks.filter(track => track.explicit === true).length;
   const highPopularityCount = uniqueTracks.filter(track => Number(track.popularity) >= 70).length;
   const discoveryCount = uniqueTracks.filter(track => Number(track.popularity) > 0 && Number(track.popularity) <= 40).length;
   const totalDurationMs = uniqueTracks.reduce((sum, track) => sum + (Number(track.durationMs) || 0), 0);
   const years = uniqueTracks.map(track => parseYear(track.releaseDate)).filter(Boolean);
-  const artistNames = uniqueTracks.flatMap(track => (track.artistNames || '').split(',').map(value => value.trim()));
-  const genres = uniqueTracks.flatMap(track => (track.genres || '').split(',').map(value => value.trim()));
+  const artistNames = uniqueTracks.flatMap(track => track.artists || []);
+  const genres = uniqueTracks.flatMap(track => track.genres || []);
   const releaseYearCounts = countValues(uniqueTracks, track => {
     const year = parseYear(track.releaseDate);
     return year ? [String(year)] : [];
@@ -139,13 +141,13 @@ export const buildInsights = (history) => {
     shortestTrack,
     mostCommonReleaseYear: releaseYearCounts[0] || null,
     popularityBuckets: getPopularityBuckets(uniqueTracks),
-    topArtists: countValues(uniqueTracks, track => (track.artistNames || '').split(',').map(value => value.trim())).slice(0, 8),
+    topArtists: countValues(uniqueTracks, track => track.artists || []).slice(0, 8),
     topAlbums: countValues(uniqueTracks, track => [track.albumName]).slice(0, 8),
     topDecades: countValues(uniqueTracks, track => {
       const year = parseYear(track.releaseDate);
       return year ? [`${Math.floor(year / 10) * 10}s`] : [];
     }).slice(0, 8),
-    topGenres: countValues(uniqueTracks, track => (track.genres || '').split(',').map(value => value.trim())).slice(0, 8),
+    topGenres: countValues(uniqueTracks, track => track.genres || []).slice(0, 8),
     topLabels: countValues(uniqueTracks, track => [track.recordLabel]).slice(0, 8),
     topYears: releaseYearCounts.slice(0, 8),
   };

@@ -95,6 +95,7 @@ export const zh = {
   'history.compareRemoved': '移除',
   'history.compareUnchanged': '未变',
   'history.compareNone': '无',
+  'history.isrc': (isrc) => `ISRC ${isrc}`,
   'insights.sourceHistory': '分析导出记录',
   'insights.currentRecord': '当前分析',
   'insights.noHistory': '暂无导出记录',

@@ -2,28 +2,40 @@ import { useMemo, useRef, useState } from 'react';
 import { Download, RotateCcw, Trash2, Upload } from 'lucide-react';
 import { useI18n } from '../../i18n';
 import { exportHistory } from '../../services/exportHistory.js';
+import { getTrackIdentity } from '../../services/musicModel.js';
 import { HistoryRecordSelect } from './HistoryRecordSelect.jsx';
 
 const formatTrack = (track) => (
   [track.name, track.artistNames].filter(Boolean).join(' · ')
 );
 
-const TrackList = ({ emptyLabel, items, title }) => (
-  <div className="rounded-xl bg-[#fafafa] dark:bg-[#161617] p-3">
-    <p className="text-[11px] font-bold uppercase tracking-wider text-[#86868b]">{title}</p>
-    {items.length === 0 ? (
-      <p className="mt-2 text-xs text-[#86868b]">{emptyLabel}</p>
-    ) : (
-      <div className="mt-2 max-h-32 space-y-1 overflow-y-auto pr-1">
-        {items.map(track => (
-          <p key={track.uri || formatTrack(track)} className="truncate text-xs font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
-            {formatTrack(track)}
-          </p>
-        ))}
-      </div>
-    )}
-  </div>
-);
+const TrackList = ({ emptyLabel, items, title }) => {
+  const { t } = useI18n();
+
+  return (
+    <div className="rounded-xl bg-[#fafafa] dark:bg-[#161617] p-3">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-[#86868b]">{title}</p>
+      {items.length === 0 ? (
+        <p className="mt-2 text-xs text-[#86868b]">{emptyLabel}</p>
+      ) : (
+        <div className="mt-2 max-h-32 space-y-1.5 overflow-y-auto pr-1">
+          {items.map(track => (
+            <div key={getTrackIdentity(track)} className="min-w-0">
+              <p className="truncate text-xs font-medium text-[#1d1d1f] dark:text-[#f5f5f7]">
+                {formatTrack(track)}
+              </p>
+              {track.isrc && (
+                <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-[#86868b]">
+                  {t('history.isrc', track.isrc)}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const HistoryPanel = ({
   history,

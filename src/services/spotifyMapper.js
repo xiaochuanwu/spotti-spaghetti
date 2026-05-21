@@ -1,15 +1,21 @@
-export const mapPlaylistTrackItem = (item) => {
+import { MUSIC_PROVIDERS } from './musicModel.js';
+
+export const mapPlaylistTrackItem = (item, playlist = null) => {
   if (!item?.track) return null;
 
   const track = item.track;
   const album = track.album || {};
 
   return {
+    provider: MUSIC_PROVIDERS.spotify,
+    providerTrackId: track.id || '',
+    providerPlaylistId: playlist?.id || '',
     artists: track.artists?.map(artist => artist?.id).filter(Boolean) || [],
     artistNames: track.artists?.map(artist => artist?.name).filter(Boolean) || [],
     albumId: album.id || '',
     albumName: album.name || '',
     uri: track.uri || '',
+    isrc: track.external_ids?.isrc || '',
     name: track.name || '',
     releaseDate: album.release_date || '',
     durationMs: track.duration_ms ?? '',
@@ -71,18 +77,28 @@ export const enrichTracksWithMetadata = (tracks, artistGenres, albumLabels) => (
     });
 
     return {
+      modelVersion: 1,
+      provider: track.provider,
+      providerTrackId: track.providerTrackId,
+      providerPlaylistId: track.providerPlaylistId || '',
       uri: track.uri,
+      isrc: track.isrc || '',
       name: track.name,
+      artists: track.artistNames,
       albumName: track.albumName,
+      album: { providerAlbumId: track.albumId, name: track.albumName },
       artistNames: track.artistNames.join(','),
       releaseDate: track.releaseDate,
       durationMs: track.durationMs,
       popularity: track.popularity,
       explicit: track.explicit ? 'Yes' : 'No',
+      explicitLabel: track.explicit ? 'Yes' : 'No',
       addedBy: track.addedById,
       addedAt: track.addedAt,
-      genres: Array.from(genresSet).join(','),
-      recordLabel: albumLabels[track.albumId] || ''
+      genres: Array.from(genresSet),
+      genreNames: Array.from(genresSet).join(','),
+      recordLabel: albumLabels[track.albumId] || '',
+      rawSource: null,
     };
   })
 );

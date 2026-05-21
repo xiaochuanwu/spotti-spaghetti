@@ -3,6 +3,19 @@ import assert from 'node:assert/strict';
 
 import { buildInsights } from '../src/services/insights.js';
 
+const pickTrackSummary = (track) => ({
+  provider: track.provider,
+  providerTrackId: track.providerTrackId,
+  uri: track.uri,
+  artistNames: track.artistNames,
+  durationMs: track.durationMs,
+  genres: track.genres,
+  recordLabel: track.recordLabel,
+  releaseDate: track.releaseDate,
+  popularity: track.popularity,
+  explicit: track.explicit,
+});
+
 test('buildInsights aggregates unique tracks across export snapshots', () => {
   const insights = buildInsights([
     {
@@ -34,25 +47,29 @@ test('buildInsights aggregates unique tracks across export snapshots', () => {
   assert.equal(insights.oldestYear, 1999);
   assert.equal(insights.newestYear, 2021);
   assert.equal(insights.averageReleaseYear, 2013);
-  assert.deepEqual(insights.longestTrack, {
+  assert.deepEqual(pickTrackSummary(insights.longestTrack), {
+    provider: 'spotify',
+    providerTrackId: '1',
     uri: 'spotify:track:1',
     artistNames: 'Artist A,Artist B',
     durationMs: 240000,
-    genres: 'pop,dance',
+    genres: ['pop', 'dance'],
     recordLabel: 'Label A',
     releaseDate: '2020-01-01',
     popularity: 80,
-    explicit: 'No',
+    explicit: false,
   });
-  assert.deepEqual(insights.shortestTrack, {
+  assert.deepEqual(pickTrackSummary(insights.shortestTrack), {
+    provider: 'spotify',
+    providerTrackId: '3',
     uri: 'spotify:track:3',
     artistNames: 'Artist C',
     durationMs: 120000,
-    genres: 'rock',
+    genres: ['rock'],
     recordLabel: 'Label A',
     releaseDate: '1999-03-01',
     popularity: 40,
-    explicit: 'No',
+    explicit: false,
   });
   assert.deepEqual(insights.mostCommonReleaseYear, { label: '1999', count: 1 });
   assert.deepEqual(insights.popularityBuckets, [
