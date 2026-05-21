@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpDown, ArrowUp, ArrowDown, FileArchive, Music, Loader2, ExternalLink } from 'lucide-react';
 import { useI18n } from '../i18n';
 
@@ -13,6 +13,8 @@ export const PlaylistsContainer = ({
   const { t } = useI18n();
   const [sortColumn, setSortColumn] = useState(null);
   const [sortDirection, setSortDirection] = useState('desc');
+  const [selectedPlaylistIds, setSelectedPlaylistIds] = useState(() => new Set());
+  const selectAllRef = useRef(null);
 
   const handleSort = (column) => {
     if (sortColumn === column) {
@@ -41,6 +43,49 @@ export const PlaylistsContainer = ({
     });
   }, [playlists, sortColumn, sortDirection]);
 
+  const playlistIds = useMemo(() => playlists.map(playlist => playlist.id).filter(Boolean), [playlists]);
+  const selectedPlaylists = useMemo(
+    () => playlists.filter(playlist => selectedPlaylistIds.has(playlist.id)),
+    [playlists, selectedPlaylistIds]
+  );
+  const selectedCount = selectedPlaylists.length;
+  const allSelected = playlistIds.length > 0 && playlistIds.every(id => selectedPlaylistIds.has(id));
+  const someSelected = selectedCount > 0 && !allSelected;
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someSelected;
+    }
+  }, [someSelected]);
+
+  const togglePlaylistSelection = (playlistId) => {
+    setSelectedPlaylistIds(current => {
+      const next = new Set(current);
+      if (next.has(playlistId)) {
+        next.delete(playlistId);
+      } else {
+        next.add(playlistId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedPlaylistIds(current => {
+      const next = new Set(current);
+      if (allSelected) {
+        playlistIds.forEach(id => next.delete(id));
+      } else {
+        playlistIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedPlaylistIds(new Set());
+  };
+
   const renderSortIcon = (column) => {
     if (sortColumn !== column) {
       return <ArrowUpDown size={12} className="inline ml-1 text-[#86868b] group-hover:text-[#1d1d1f] dark:group-hover:text-white transition-colors" />;
@@ -65,6 +110,17 @@ export const PlaylistsContainer = ({
               key={playlist.id || i}
               className="bg-white dark:bg-[#1d1d1f] border border-[#e5e5e7] dark:border-[#333336]/40 p-4 rounded-2xl transition-all duration-300 hover:bg-[#f0f0f2] dark:hover:bg-[#2d2d30] flex flex-col select-none shadow-sm dark:shadow-none"
             >
+              <label className="mb-3 inline-flex items-center gap-2 text-[11px] font-bold text-[#86868b]">
+                <input
+                  type="checkbox"
+                  checked={selectedPlaylistIds.has(playlist.id)}
+                  onChange={() => togglePlaylistSelection(playlist.id)}
+                  aria-label={t('playlists.selectOne', playlist.name)}
+                  className="h-4 w-4 rounded border-[#d2d2d7] accent-[#0071e3]"
+                />
+                <span>{t('playlists.select')}</span>
+              </label>
+
               <div 
                 onClick={() => onPreview && onPreview(playlist)}
                 className="relative aspect-square w-full rounded-xl overflow-hidden bg-[#f0f0f2] dark:bg-[#161617] flex items-center justify-center mb-4 cursor-pointer group/cover border border-black/[0.04] dark:border-white/[0.04]"
@@ -102,7 +158,7 @@ export const PlaylistsContainer = ({
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-[#86868b] hover:text-[#0071e3] transition-colors p-0.5 mt-0.5 shrink-0"
-                        title="Open on Spotify"
+                        title={t('playlists.openSpotify')}
                       >
                         <ExternalLink size={12} />
                       </a>
@@ -154,6 +210,7 @@ export const PlaylistsContainer = ({
           <table className="w-full border-collapse text-left">
             <thead className="bg-[#fafafa] dark:bg-[#1c1c1e] border-b border-[#e5e5e7] dark:border-[#333336] select-none">
               <tr className="text-xs tracking-wider text-[#86868b] uppercase">
+                <th className="p-3 w-12 text-center">{t('playlists.select')}</th>
                 <th className="p-3 w-16 text-center">{t('playlists.col.cover')}</th>
                 <th 
                   className="p-3 font-semibold cursor-pointer group hover:bg-[#f0f0f2] dark:hover:bg-[#2d2d30] transition-colors"
@@ -191,6 +248,15 @@ export const PlaylistsContainer = ({
                     className="hover:bg-[#f5f5f7] dark:hover:bg-[#2d2d30]/40 transition-colors duration-150 group"
                   >
                     <td className="p-2.5 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedPlaylistIds.has(playlist.id)}
+                        onChange={() => togglePlaylistSelection(playlist.id)}
+                        aria-label={t('playlists.selectOne', playlist.name)}
+                        className="h-4 w-4 rounded border-[#d2d2d7] accent-[#0071e3]"
+                      />
+                    </td>
+                    <td className="p-2.5 text-center">
                       <div 
                         onClick={() => onPreview && onPreview(playlist)}
                         className="w-8 h-8 rounded bg-[#f0f0f2] dark:bg-[#161617] border border-neutral-200 dark:border-neutral-800/10 overflow-hidden mx-auto flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
@@ -222,7 +288,7 @@ export const PlaylistsContainer = ({
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-[#86868b] hover:text-[#0071e3] transition-colors p-0.5 shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100"
-                            title="Open on Spotify"
+                            title={t('playlists.openSpotify')}
                           >
                             <ExternalLink size={11} />
                           </a>
@@ -273,23 +339,61 @@ export const PlaylistsContainer = ({
 
   return (
     <div className="w-full flex flex-col gap-6 select-none">
-      <div className="flex items-center justify-between border-b border-[#e5e5e7] dark:border-[#333336] pb-4">
+      <div className="flex flex-col gap-3 border-b border-[#e5e5e7] dark:border-[#333336] pb-4 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-xs font-bold text-[#86868b] tracking-wider uppercase">
           {t('playlists.title')}
         </h3>
-        
-        <button
-          onClick={() => onExportAll()}
-          disabled={exportingState.isExporting}
-          className="inline-flex items-center gap-1.5 bg-[#0071e3] hover:bg-[#0077ed] disabled:bg-neutral-800 disabled:text-neutral-500 text-white text-xs font-bold px-4 py-2 rounded-full cursor-pointer transition-all duration-200 disabled:cursor-not-allowed hover:shadow active:scale-95"
-        >
-          {isGlobalExporting ? (
-            <Loader2 size={13} className="animate-spin" />
-          ) : (
-            <FileArchive size={13} />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex items-center gap-2 rounded-full border border-[#e5e5e7] dark:border-[#333336] bg-white dark:bg-[#1d1d1f] px-3 py-2 text-xs font-bold text-[#6e6e73] dark:text-[#a1a1a6]">
+            <input
+              ref={selectAllRef}
+              type="checkbox"
+              checked={allSelected}
+              onChange={toggleSelectAll}
+              disabled={playlistIds.length === 0}
+              aria-label={allSelected ? t('playlists.selectNone') : t('playlists.selectAll')}
+              className="h-4 w-4 rounded border-[#d2d2d7] accent-[#0071e3]"
+            />
+            <span>{allSelected ? t('playlists.selectNone') : t('playlists.selectAll')}</span>
+          </label>
+
+          {selectedCount > 0 && (
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="rounded-full px-3 py-2 text-xs font-bold text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white"
+            >
+              {t('playlists.clearSelection')}
+            </button>
           )}
-          <span>{t('playlists.exportAll')}</span>
-        </button>
+
+          <button
+            onClick={() => onExportAll(selectedPlaylists)}
+            disabled={exportingState.isExporting || selectedCount === 0}
+            className="inline-flex items-center gap-1.5 bg-[#e8e8ed] dark:bg-[#2d2d30] hover:bg-[#0071e3] disabled:bg-neutral-200 dark:disabled:bg-neutral-800/40 text-[#0071e3] hover:text-white disabled:text-neutral-400 dark:disabled:text-neutral-600 text-xs font-bold px-4 py-2 rounded-full cursor-pointer transition-all duration-200 disabled:cursor-not-allowed hover:shadow active:scale-95"
+          >
+            {isGlobalExporting && selectedCount > 0 ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <FileArchive size={13} />
+            )}
+            <span>{t('playlists.exportSelected', selectedCount)}</span>
+          </button>
+
+          <button
+            onClick={() => onExportAll()}
+            disabled={exportingState.isExporting}
+            className="inline-flex items-center gap-1.5 bg-[#0071e3] hover:bg-[#0077ed] disabled:bg-neutral-800 disabled:text-neutral-500 text-white text-xs font-bold px-4 py-2 rounded-full cursor-pointer transition-all duration-200 disabled:cursor-not-allowed hover:shadow active:scale-95"
+          >
+            {isGlobalExporting ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <FileArchive size={13} />
+            )}
+            <span>{t('playlists.exportAll')}</span>
+          </button>
+        </div>
       </div>
 
       {playlists.length > 0 ? (

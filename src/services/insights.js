@@ -25,6 +25,42 @@ const formatDurationHours = (durationMs) => (
 
 const uniqueCount = (items) => new Set(items.filter(Boolean)).size;
 
+const getDurationExtremes = (tracks) => {
+  const tracksWithDuration = tracks.filter(track => Number(track.durationMs) > 0);
+  if (tracksWithDuration.length === 0) {
+    return { longestTrack: null, shortestTrack: null };
+  }
+
+  return tracksWithDuration.reduce((extremes, track) => {
+    const duration = Number(track.durationMs);
+    return {
+      longestTrack: duration > Number(extremes.longestTrack.durationMs) ? track : extremes.longestTrack,
+      shortestTrack: duration < Number(extremes.shortestTrack.durationMs) ? track : extremes.shortestTrack,
+    };
+  }, {
+    longestTrack: tracksWithDuration[0],
+    shortestTrack: tracksWithDuration[0],
+  });
+};
+
+const getPopularityBuckets = (tracks) => {
+  const ranges = [
+    { label: '0-20', min: 0, max: 20 },
+    { label: '21-40', min: 21, max: 40 },
+    { label: '41-60', min: 41, max: 60 },
+    { label: '61-80', min: 61, max: 80 },
+    { label: '81-100', min: 81, max: 100 },
+  ];
+
+  return ranges.map(range => ({
+    label: range.label,
+    count: tracks.filter(track => {
+      const popularity = Number(track.popularity);
+      return Number.isFinite(popularity) && popularity >= range.min && popularity <= range.max;
+    }).length,
+  }));
+};
+
 export const buildInsights = (history) => {
   const tracks = history.flatMap(snapshot => snapshot.tracks || []);
   const uniqueTracks = Array.from(new Map(tracks.map(track => [track.uri, track])).values());
@@ -47,6 +83,10 @@ export const buildInsights = (history) => {
       averageReleaseYear: null,
       oldestYear: null,
       newestYear: null,
+      longestTrack: null,
+      shortestTrack: null,
+      mostCommonReleaseYear: null,
+      popularityBuckets: getPopularityBuckets([]),
       topArtists: [],
       topAlbums: [],
       topDecades: [],
@@ -67,6 +107,11 @@ export const buildInsights = (history) => {
   const years = uniqueTracks.map(track => parseYear(track.releaseDate)).filter(Boolean);
   const artistNames = uniqueTracks.flatMap(track => (track.artistNames || '').split(',').map(value => value.trim()));
   const genres = uniqueTracks.flatMap(track => (track.genres || '').split(',').map(value => value.trim()));
+  const releaseYearCounts = countValues(uniqueTracks, track => {
+    const year = parseYear(track.releaseDate);
+    return year ? [String(year)] : [];
+  });
+  const { longestTrack, shortestTrack } = getDurationExtremes(uniqueTracks);
 
   return {
     trackCount,
@@ -90,6 +135,10 @@ export const buildInsights = (history) => {
       : null,
     oldestYear: years.length ? Math.min(...years) : null,
     newestYear: years.length ? Math.max(...years) : null,
+    longestTrack,
+    shortestTrack,
+    mostCommonReleaseYear: releaseYearCounts[0] || null,
+    popularityBuckets: getPopularityBuckets(uniqueTracks),
     topArtists: countValues(uniqueTracks, track => (track.artistNames || '').split(',').map(value => value.trim())).slice(0, 8),
     topAlbums: countValues(uniqueTracks, track => [track.albumName]).slice(0, 8),
     topDecades: countValues(uniqueTracks, track => {
@@ -98,6 +147,6 @@ export const buildInsights = (history) => {
     }).slice(0, 8),
     topGenres: countValues(uniqueTracks, track => (track.genres || '').split(',').map(value => value.trim())).slice(0, 8),
     topLabels: countValues(uniqueTracks, track => [track.recordLabel]).slice(0, 8),
-    topYears: countValues(uniqueTracks, track => [String(track.releaseDate || '').slice(0, 4)]).slice(0, 8),
+    topYears: releaseYearCounts.slice(0, 8),
   };
 };

@@ -95,8 +95,8 @@ export const mapPreviewTrackItem = (item) => {
   return {
     id: track.id,
     name: track.name,
-    artists: track.artists?.map(artist => artist.name).join(', ') || 'Unknown Artist',
-    albumName: track.album?.name || 'Unknown Album',
+    artists: track.artists?.map(artist => artist.name).join(', ') || '',
+    albumName: track.album?.name || '',
     albumCover: track.album?.images?.[2]?.url || track.album?.images?.[0]?.url || '',
     durationMs: track.duration_ms,
     externalUrl: track.external_urls?.spotify

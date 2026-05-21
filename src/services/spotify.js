@@ -15,6 +15,8 @@ import {
 const MAX_RATE_LIMIT_RETRIES = 4;
 const authStorage = sessionStorage;
 
+const createSpotifyError = (code, details = {}) => Object.assign(new Error(code), { code, details });
+
 export const spotify = {
   // Authorization PKCE Code Flow
   async authorize() {
@@ -131,7 +133,7 @@ export const spotify = {
         // Rate limiting hit
         const retryAfter = parseInt(response.headers.get('Retry-After') || '2', 10);
         if (retryCount >= MAX_RATE_LIMIT_RETRIES) {
-          throw new Error(`Spotify API rate limit exceeded after ${MAX_RATE_LIMIT_RETRIES} retries`);
+          throw createSpotifyError('SPOTIFY_RATE_LIMIT_EXCEEDED', { retryCount });
         }
         if (onRateLimit) {
           onRateLimit(retryAfter);
@@ -140,7 +142,10 @@ export const spotify = {
         return await this.apiCall(url, retryAfter * 1000, onRateLimit, retryCount + 1, options);
       }
 
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      throw createSpotifyError('SPOTIFY_REQUEST_FAILED', {
+        status: response.status,
+        statusText: response.statusText,
+      });
     } catch (error) {
       console.error(`API Call error for ${url}:`, error);
       throw error;
@@ -154,7 +159,7 @@ export const spotify = {
 
   async createPlaylist(name, description = '') {
     const user = await this.getUser();
-    if (!user?.id) throw new Error('Unable to load Spotify user profile');
+    if (!user?.id) throw createSpotifyError('SPOTIFY_USER_PROFILE_UNAVAILABLE');
 
     return this.apiCall(`https://api.spotify.com/v1/users/${user.id}/playlists`, 0, null, 0, {
       method: 'POST',
@@ -180,28 +185,28 @@ export const spotify = {
     }
   },
 
-  async restorePlaylist(name, trackUris, onProgress = null) {
-    const playlist = await this.createPlaylist(name, 'Restored by Spotti Spaghetti');
+  async restorePlaylist(name, trackUris, onProgress = null, description = '') {
+    const playlist = await this.createPlaylist(name, description);
     await this.addTracksToPlaylist(playlist.id, trackUris, onProgress);
     return playlist;
   },
 
-  // Fetch all playlists (including virtual "Liked Songs")
+  // Fetch all playlists (including the saved-tracks virtual playlist)
   async getPlaylists(onStatusChange = null) {
     if (onStatusChange) onStatusChange({ step: 'userProfile' }, 0);
     const user = await this.getUser();
-    if (!user) throw new Error('Unable to load Spotify user profile');
+    if (!user) throw createSpotifyError('SPOTIFY_USER_PROFILE_UNAVAILABLE');
 
     if (onStatusChange) onStatusChange({ step: 'likedSongsCount' }, 10);
     const libraryInfo = await this.apiCall("https://api.spotify.com/v1/me/tracks?offset=0&limit=1");
     
     const playlists = [];
     
-    // 1. Inject Liked Songs as a virtual playlist
+    // 1. Inject saved tracks as a virtual playlist
     if (libraryInfo) {
       playlists.push({
         id: 'liked_songs',
-        name: "Liked Songs",
+        name: 'liked_songs',
         external_urls: { spotify: "https://open.spotify.com/collection/tracks" },
         images: [{ url: likedSongsCover }],
         owner: {
@@ -220,7 +225,7 @@ export const spotify = {
     
     // 2. Fetch standard playlists
     let response = await this.apiCall("https://api.spotify.com/v1/me/playlists?limit=50&offset=0");
-    if (!response) throw new Error('Unable to load Spotify playlists');
+    if (!response) throw createSpotifyError('SPOTIFY_PLAYLISTS_UNAVAILABLE');
 
     playlists.push(...response.items);
     

@@ -117,3 +117,24 @@ test('mapPreviewTrackItem creates compact modal data', () => {
 
   assert.equal(mapPreviewTrackItem({ track: null }), null);
 });
+
+test('mapPreviewTrackItem leaves display fallbacks to the UI layer', () => {
+  assert.deepEqual(mapPreviewTrackItem({
+    track: {
+      id: 'track-2',
+      name: 'Sparse Track',
+      artists: [],
+      album: {},
+      duration_ms: 90000,
+      external_urls: {},
+    },
+  }), {
+    id: 'track-2',
+    name: 'Sparse Track',
+    artists: '',
+    albumName: '',
+    albumCover: '',
+    durationMs: 90000,
+    externalUrl: undefined,
+  });
+});

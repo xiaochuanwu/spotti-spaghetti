@@ -33,6 +33,35 @@ test('buildInsights aggregates unique tracks across export snapshots', () => {
   assert.equal(insights.discoveryRatio, 33);
   assert.equal(insights.oldestYear, 1999);
   assert.equal(insights.newestYear, 2021);
+  assert.equal(insights.averageReleaseYear, 2013);
+  assert.deepEqual(insights.longestTrack, {
+    uri: 'spotify:track:1',
+    artistNames: 'Artist A,Artist B',
+    durationMs: 240000,
+    genres: 'pop,dance',
+    recordLabel: 'Label A',
+    releaseDate: '2020-01-01',
+    popularity: 80,
+    explicit: 'No',
+  });
+  assert.deepEqual(insights.shortestTrack, {
+    uri: 'spotify:track:3',
+    artistNames: 'Artist C',
+    durationMs: 120000,
+    genres: 'rock',
+    recordLabel: 'Label A',
+    releaseDate: '1999-03-01',
+    popularity: 40,
+    explicit: 'No',
+  });
+  assert.deepEqual(insights.mostCommonReleaseYear, { label: '1999', count: 1 });
+  assert.deepEqual(insights.popularityBuckets, [
+    { label: '0-20', count: 0 },
+    { label: '21-40', count: 1 },
+    { label: '41-60', count: 1 },
+    { label: '61-80', count: 1 },
+    { label: '81-100', count: 0 },
+  ]);
   assert.deepEqual(insights.topArtists.slice(0, 3), [
     { label: 'Artist B', count: 2 },
     { label: 'Artist A', count: 1 },

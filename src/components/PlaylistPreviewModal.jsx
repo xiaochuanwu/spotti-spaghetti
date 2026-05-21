@@ -32,7 +32,7 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
         if (isCurrentRequest) setTracks(data);
       } catch (err) {
         console.error('Failed to load preview:', err);
-        if (isCurrentRequest) setError(err.message || 'Failed to load tracks.');
+        if (isCurrentRequest) setError(t('preview.loadFailed'));
       } finally {
         if (isCurrentRequest) setIsLoading(false);
       }
@@ -47,7 +47,7 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
       isCurrentRequest = false;
       document.body.style.overflow = origOverflow;
     };
-  }, [isOpen, playlist]);
+  }, [isOpen, playlist, t]);
 
   // Escape key event listener
   useEffect(() => {
@@ -152,13 +152,15 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
                     </div>
                     <div className="min-w-0">
                       <p className="font-semibold truncate">{track.name}</p>
-                      <p className="text-[10px] text-[#86868b] truncate mt-0.5">{track.artists}</p>
+                      <p className="text-[10px] text-[#86868b] truncate mt-0.5">
+                        {track.artists || t('preview.unknownArtist')}
+                      </p>
                     </div>
                   </div>
 
                   {/* Album */}
                   <div className="flex-1 min-w-0 pr-4 text-[#6e6e73] dark:text-[#a1a1a6] truncate hidden sm:block">
-                    {track.albumName}
+                    {track.albumName || t('preview.unknownAlbum')}
                   </div>
 
                   {/* Duration */}
@@ -174,7 +176,7 @@ export const PlaylistPreviewModal = ({ isOpen, onClose, playlist }) => {
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="p-1 rounded-md text-[#86868b] hover:text-[#0071e3] hover:bg-[#0071e3]/10 dark:hover:bg-[#0071e3]/20 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-                        title="Listen on Spotify"
+                        title={t('preview.listenSpotify')}
                       >
                         <ExternalLink size={12} />
                       </a>

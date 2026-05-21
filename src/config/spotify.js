@@ -9,7 +9,7 @@ export const SPOTIFY_CONFIG = {
 
 export const getSpotifyClientId = () => {
   if (!SPOTIFY_CONFIG.clientId) {
-    throw new Error('Missing VITE_SPOTIFY_CLIENT_ID environment variable.');
+    throw new Error('SPOTIFY_CLIENT_ID_MISSING');
   }
 
   return SPOTIFY_CONFIG.clientId;

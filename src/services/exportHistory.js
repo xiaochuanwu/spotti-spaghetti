@@ -68,9 +68,14 @@ export const exportHistory = {
 
     const added = snapshot.tracks.filter(track => !previousByUri.has(track.uri));
     const removed = previousSnapshot.tracks.filter(track => !currentByUri.has(track.uri));
+    const unchanged = snapshot.tracks.filter(track => previousByUri.has(track.uri));
     const unchangedCount = snapshot.tracks.length - added.length;
 
-    return { added, removed, unchangedCount };
+    return { added, removed, unchanged, unchangedCount };
+  },
+
+  async deleteSnapshot(id) {
+    await database.delete(DB_STORES.exportHistory, id);
   },
 
   async clear() {

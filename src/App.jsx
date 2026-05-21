@@ -6,14 +6,20 @@ import { SearchFilter } from './components/SearchFilter';
 import { PlaylistsContainer } from './components/PlaylistsContainer';
 import { ProgressBar } from './components/ProgressBar';
 import { Footer } from './components/Footer';
-import { WorkspacePanel } from './components/WorkspacePanel';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { WorkspacePanel } from './components/workspace/WorkspacePanel';
+import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useI18n } from './i18n';
 import { PlaylistPreviewModal } from './components/PlaylistPreviewModal';
 import { useThemePreference } from './hooks/useThemePreference.js';
 import { batchSession } from './services/batchSession.js';
 import { exportHistory } from './services/exportHistory.js';
 
+const SPOTIFY_ERROR_KEYS = {
+  SPOTIFY_RATE_LIMIT_EXCEEDED: 'error.spotifyRateLimit',
+  SPOTIFY_REQUEST_FAILED: 'error.spotifyRequestFailed',
+  SPOTIFY_USER_PROFILE_UNAVAILABLE: 'error.spotifyUserUnavailable',
+  SPOTIFY_PLAYLISTS_UNAVAILABLE: 'error.spotifyPlaylistsUnavailable',
+};
 
 export default function App() {
   const { t } = useI18n();
@@ -22,6 +28,7 @@ export default function App() {
   const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
   const [viewMode, setViewMode] = useState('grid');
   const [previewPlaylist, setPreviewPlaylist] = useState(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -55,9 +62,16 @@ export default function App() {
     };
   }, []);
 
+  const localizePlaylist = useCallback((playlist) => (
+    playlist.id === 'liked_songs'
+      ? { ...playlist, name: t('playlists.likedSongs') }
+      : playlist
+  ), [t]);
+
   const loadPlaylists = useCallback(async () => {
     setIsLoadingPlaylists(true);
     setErrorMessage('');
+    setStatusMessage('');
     try {
       const list = await spotify.getPlaylists();
       setPlaylists(list);
@@ -97,6 +111,7 @@ export default function App() {
 
   const handleLogin = async () => {
     setErrorMessage('');
+    setStatusMessage('');
     try {
       await spotify.authorize();
     } catch (err) {
@@ -109,15 +124,22 @@ export default function App() {
     spotify.logout();
     setIsLoggedIn(false);
     setPlaylists([]);
+    setErrorMessage('');
+    setStatusMessage('');
   };
 
   const formatSpotifyTask = useCallback((taskInfo, fallbackKey = 'task.downloading') => {
     if (!taskInfo) return t(fallbackKey);
-    if (typeof taskInfo === 'string') return taskInfo;
+    if (typeof taskInfo === 'string') return t(fallbackKey);
     if (taskInfo.step === 'downloadTracks') {
       return t('task.downloadTracks', taskInfo.offset, taskInfo.total);
     }
     return t(`task.${taskInfo.step}`);
+  }, [t]);
+
+  const getErrorText = useCallback((err) => {
+    const key = SPOTIFY_ERROR_KEYS[err?.code || err?.message] || 'error.genericDetail';
+    return t(key);
   }, [t]);
 
   const recordSnapshot = async (playlist, tracks) => {
@@ -135,9 +157,35 @@ export default function App() {
   };
 
   const clearHistory = async () => {
+    if (!window.confirm(t('history.clearConfirm'))) return;
     await exportHistory.clear();
     setHistorySnapshots([]);
     setLatestDiff(null);
+    setErrorMessage('');
+    setStatusMessage(t('status.historyCleared'));
+  };
+
+  const deleteHistorySnapshot = async (id) => {
+    await exportHistory.deleteSnapshot(id);
+    setHistorySnapshots(await exportHistory.all());
+    setLatestDiff(null);
+    setErrorMessage('');
+    setStatusMessage(t('status.historyDeleted'));
+  };
+
+  const exportLocalHistory = async () => {
+    const history = await exportHistory.all();
+    const blob = new Blob([JSON.stringify(history, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `spotti-spaghetti-history-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setErrorMessage('');
+    setStatusMessage(t('status.historyExported', history.length));
   };
 
   const handleExportSingle = async (playlist) => {
@@ -149,6 +197,7 @@ export default function App() {
       currentItem: playlist.name
     });
     setErrorMessage('');
+    setStatusMessage('');
 
     try {
       const tracks = await spotify.getPlaylistTracks(
@@ -176,7 +225,7 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
-      setErrorMessage(t('error.exportFailed', playlist.name, err.message));
+      setErrorMessage(t('error.exportFailed', playlist.name, getErrorText(err)));
     } finally {
       setExportingState({
         isExporting: false, activePlaylistId: null,
@@ -186,7 +235,8 @@ export default function App() {
   };
 
   const handleExportAll = async (targetPlaylists = playlists) => {
-    const exportTargets = Array.isArray(targetPlaylists) ? targetPlaylists : playlists;
+    const sourceTargets = Array.isArray(targetPlaylists) ? targetPlaylists : playlists;
+    const exportTargets = sourceTargets.map(localizePlaylist);
 
     setExportingState({
       isExporting: true,
@@ -196,12 +246,18 @@ export default function App() {
       currentItem: t('task.batchItem')
     });
     setErrorMessage('');
+    setStatusMessage('');
 
     const playlistsWithTracks = [];
     const failed = [];
     const totalPlaylists = exportTargets.length;
 
     try {
+      if (totalPlaylists === 0) {
+        setErrorMessage(t('error.batchEmptySelection'));
+        return;
+      }
+
       for (let i = 0; i < totalPlaylists; i++) {
         const playlist = exportTargets[i];
         
@@ -238,7 +294,7 @@ export default function App() {
           }
         } catch (err) {
           console.error(err);
-          failed.push({ id: playlist.id, name: playlist.name, message: err.message });
+          failed.push({ id: playlist.id, name: playlist.name, code: err.code || err.message });
         }
       }
 
@@ -250,22 +306,30 @@ export default function App() {
 
       if (playlistsWithTracks.length > 0) {
         await exporter.exportZIP(playlistsWithTracks);
-      } else {
-        setErrorMessage(t('error.allEmpty'));
       }
 
       if (failed.length > 0) {
         const session = { failed };
         batchSession.save(session);
         setBatchSessionState(batchSession.read());
-        setErrorMessage(t('error.batchPartialFailed', failed.length));
+        if (playlistsWithTracks.length > 0) {
+          setStatusMessage(t('status.batchExportedWithFailures', playlistsWithTracks.length, failed.length));
+        } else {
+          setErrorMessage(t('error.batchAllFailed', failed.length));
+        }
       } else {
         batchSession.clear();
         setBatchSessionState(null);
+        if (playlistsWithTracks.length > 0) {
+          setStatusMessage(t('status.batchExported', playlistsWithTracks.length));
+        } else {
+          setErrorMessage(t('error.allEmpty'));
+        }
       }
     } catch (err) {
       console.error(err);
-      setErrorMessage(t('error.batchFailed', err.message));
+      setStatusMessage('');
+      setErrorMessage(t('error.batchFailed', getErrorText(err)));
     } finally {
       setExportingState({
         isExporting: false, activePlaylistId: null,
@@ -275,6 +339,7 @@ export default function App() {
   };
 
   const handleRetryFailedBatch = () => {
+    setStatusMessage('');
     const failedIds = new Set(batchSessionState?.failed?.map(item => item.id) || []);
     const retryPlaylists = playlists.filter(playlist => failedIds.has(playlist.id));
     if (retryPlaylists.length === 0) {
@@ -293,16 +358,17 @@ export default function App() {
       currentItem: name
     });
     setErrorMessage('');
+    setStatusMessage('');
 
     try {
       const playlist = await spotify.restorePlaylist(name, trackUris, (progress) => {
         setExportingState(prev => ({ ...prev, progress }));
-      });
+      }, t('restore.description'));
       await loadPlaylists();
       return playlist;
     } catch (err) {
       console.error(err);
-      setErrorMessage(t('error.restoreFailed', err.message));
+      setErrorMessage(t('error.restoreFailed', getErrorText(err)));
       throw err;
     } finally {
       setExportingState({
@@ -312,11 +378,16 @@ export default function App() {
     }
   };
 
+  const localizedPlaylists = useMemo(
+    () => playlists.map(localizePlaylist),
+    [localizePlaylist, playlists]
+  );
+
   const filteredPlaylists = useMemo(() => {
-    if (!searchQuery.trim()) return playlists;
+    if (!searchQuery.trim()) return localizedPlaylists;
     const query = searchQuery.toLowerCase().trim();
-    return playlists.filter(p => p.name?.toLowerCase().includes(query));
-  }, [playlists, searchQuery]);
+    return localizedPlaylists.filter(p => p.name?.toLowerCase().includes(query));
+  }, [localizedPlaylists, searchQuery]);
 
   return (
     <div className="relative flex-1 w-full max-w-6xl mx-auto flex flex-col px-4 pb-4 md:px-6 md:pb-6 min-h-screen">
@@ -354,6 +425,17 @@ export default function App() {
             </div>
           )}
 
+          {statusMessage && (
+            <div
+              className="flex items-start gap-3 bg-[#f0f5ff] dark:bg-[#071426] border border-[#0071e3]/20 text-[#0057b8] dark:text-[#8ec8ff] px-5 py-4 rounded-2xl shadow-md dark:shadow-none mb-6 animate-fade-in"
+              role="status"
+              aria-live="polite"
+            >
+              <CheckCircle2 className="w-5 h-5 mt-0.5 flex-shrink-0 text-[#0071e3]" />
+              <div className="text-sm font-semibold leading-relaxed">{statusMessage}</div>
+            </div>
+          )}
+
           <ProgressBar exportingState={exportingState} />
 
           {isLoggedIn ? (
@@ -381,6 +463,9 @@ export default function App() {
                   isBusy={exportingState.isExporting}
                   latestDiff={latestDiff}
                   onClearHistory={clearHistory}
+                  onDeleteHistory={deleteHistorySnapshot}
+                  onExportHistory={exportLocalHistory}
+                  formatError={getErrorText}
                   onRestorePlaylist={handleRestorePlaylist}
                   onRetryBatch={handleRetryFailedBatch}
                 />
