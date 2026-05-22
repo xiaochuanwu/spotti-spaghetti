@@ -13,28 +13,12 @@ import { PlaylistPreviewModal } from './components/PlaylistPreviewModal';
 import { useThemePreference } from './hooks/useThemePreference.js';
 import { batchSession } from './services/batchSession.js';
 import { exportHistory, getTrackUrisFromSnapshot } from './services/exportHistory.js';
-import { getMusicProvider } from './services/providers/providerRegistry.js';
-
-const musicProvider = getMusicProvider();
-
-const SPOTIFY_ERROR_KEYS = {
-  SPOTIFY_RATE_LIMIT_EXCEEDED: 'error.spotifyRateLimit',
-  SPOTIFY_REQUEST_FAILED: 'error.spotifyRequestFailed',
-  SPOTIFY_AUTH_DENIED: 'error.authFailed',
-  SPOTIFY_AUTH_EXCHANGE_FAILED: 'error.authFailed',
-  SPOTIFY_AUTH_EXPIRED: 'error.spotifyAuthExpired',
-  SPOTIFY_AUTH_STATE_MISMATCH: 'error.spotifyAuthStateMismatch',
-  SPOTIFY_PERMISSION_DENIED: 'error.spotifyPermissionDenied',
-  SPOTIFY_REQUEST_CANCELLED: 'error.spotifyRequestCancelled',
-  SPOTIFY_USER_PROFILE_UNAVAILABLE: 'error.spotifyUserUnavailable',
-  SPOTIFY_PLAYLISTS_UNAVAILABLE: 'error.spotifyPlaylistsUnavailable',
-};
-
-const isAuthExpiredError = (err) => err?.code === 'SPOTIFY_AUTH_EXPIRED';
-const isCancelledError = (err) => err?.code === 'SPOTIFY_REQUEST_CANCELLED';
+import { DEFAULT_PROVIDER_ID, getMusicProvider } from './services/providers/providerRegistry.js';
+import { createProviderError, PROVIDER_ERROR_CODES } from './services/providers/musicProvider.js';
 
 export default function App() {
   const { t } = useI18n();
+  const [currentProviderId] = useState(DEFAULT_PROVIDER_ID);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [playlists, setPlaylists] = useState([]);
   const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false);
@@ -50,6 +34,7 @@ export default function App() {
   const [confirmation, setConfirmation] = useState(null);
   const activeExportAbortRef = useRef(null);
   const { setTheme, themePreference } = useThemePreference();
+  const currentProvider = useMemo(() => getMusicProvider(currentProviderId), [currentProviderId]);
 
   // Single and batch export progress tracking
   const [exportingState, setExportingState] = useState({
@@ -83,17 +68,33 @@ export default function App() {
       : playlist
   ), [t]);
 
-  const getErrorText = useCallback((err) => {
-    const key = SPOTIFY_ERROR_KEYS[err?.code || err?.message] || 'error.genericDetail';
-    return t(key);
-  }, [t]);
+  const getProviderErrorInfo = useCallback((err) => (
+    currentProvider.getErrorInfo?.(err) || {
+      code: err?.code || err?.message || 'UNKNOWN_PROVIDER_ERROR',
+      translationKey: 'error.genericDetail',
+      isAuthExpired: false,
+      isCancelled: false,
+    }
+  ), [currentProvider]);
+
+  const getErrorText = useCallback((err) => (
+    t(getProviderErrorInfo(err).translationKey)
+  ), [getProviderErrorInfo, t]);
+
+  const isAuthExpiredError = useCallback((err) => (
+    getProviderErrorInfo(err).isAuthExpired
+  ), [getProviderErrorInfo]);
+
+  const isCancelledError = useCallback((err) => (
+    getProviderErrorInfo(err).isCancelled
+  ), [getProviderErrorInfo]);
 
   const loadPlaylists = useCallback(async () => {
     setIsLoadingPlaylists(true);
     setErrorMessage('');
     setStatusMessage('');
     try {
-      const list = await musicProvider.getPlaylists();
+      const list = await currentProvider.getPlaylists();
       setPlaylists(list);
     } catch (err) {
       console.error(err);
@@ -102,15 +103,16 @@ export default function App() {
     } finally {
       setIsLoadingPlaylists(false);
     }
-  }, [getErrorText, t]);
+  }, [currentProvider, getErrorText, isAuthExpiredError, t]);
 
   useEffect(() => {
     const initAuth = async () => {
-      const hasCode = new URLSearchParams(window.location.search).has('code');
-      if (hasCode) {
+      const callbackParams = new URLSearchParams(window.location.search);
+      const hasAuthCallback = callbackParams.has('code') || callbackParams.has('error');
+      if (hasAuthCallback) {
         setIsLoadingPlaylists(true);
         try {
-          const success = await musicProvider.handleCallback();
+          const success = await currentProvider.handleCallback();
           if (success) {
             setIsLoggedIn(true);
           } else {
@@ -123,12 +125,12 @@ export default function App() {
           setIsLoadingPlaylists(false);
         }
       } else {
-        const loggedIn = musicProvider.isLoggedIn();
+        const loggedIn = currentProvider.isLoggedIn();
         setIsLoggedIn(loggedIn);
       }
     };
     initAuth();
-  }, [getErrorText, t]);
+  }, [currentProvider, getErrorText, t]);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -140,7 +142,7 @@ export default function App() {
     setErrorMessage('');
     setStatusMessage('');
     try {
-      await musicProvider.authorize();
+      await currentProvider.authorize();
     } catch (err) {
       console.error(err);
       setErrorMessage(t('error.missingClientId'));
@@ -148,7 +150,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    musicProvider.logout();
+    currentProvider.logout();
     setIsLoggedIn(false);
     setPlaylists([]);
     setErrorMessage('');
@@ -259,7 +261,7 @@ export default function App() {
     setStatusMessage('');
 
     try {
-      const tracks = await musicProvider.getPlaylistTracks(
+      const tracks = await currentProvider.getPlaylistTracks(
         playlist,
         (progress, taskInfo) => {
           setExportingState(prev => ({
@@ -331,7 +333,7 @@ export default function App() {
 
       for (let i = 0; i < totalPlaylists; i++) {
         if (abortController.signal.aborted) {
-          throw Object.assign(new Error('SPOTIFY_REQUEST_CANCELLED'), { code: 'SPOTIFY_REQUEST_CANCELLED' });
+          throw createProviderError(PROVIDER_ERROR_CODES.REQUEST_CANCELLED);
         }
 
         const playlist = exportTargets[i];
@@ -344,7 +346,7 @@ export default function App() {
         }));
 
         try {
-          const tracks = await musicProvider.getPlaylistTracks(
+          const tracks = await currentProvider.getPlaylistTracks(
             playlist,
             (playlistProgress, taskInfo) => {
               const overallStart = (i / totalPlaylists) * 100;
@@ -459,7 +461,7 @@ export default function App() {
     setStatusMessage('');
 
     try {
-      const playlist = await musicProvider.restorePlaylist(name, trackUris, (progress) => {
+      const playlist = await currentProvider.restorePlaylist(name, trackUris, (progress) => {
         setExportingState(prev => ({ ...prev, progress }));
       }, t('restore.description'));
       await loadPlaylists();
@@ -648,7 +650,7 @@ export default function App() {
         isOpen={isPreviewOpen} 
         onClose={() => setIsPreviewOpen(false)} 
         playlist={previewPlaylist} 
-        provider={musicProvider}
+        provider={currentProvider}
       />
       <ConfirmDialog
         isOpen={Boolean(confirmation)}

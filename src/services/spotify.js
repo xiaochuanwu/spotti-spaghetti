@@ -1,5 +1,4 @@
 // Spotify Web API Service with PKCE Authorization
-import likedSongsCover from '../assets/images/liked_songs.png';
 import { STORAGE_KEYS } from '../config/storage.js';
 import { SPOTIFY_CONFIG, getSpotifyClientId } from '../config/spotify.js';
 import {
@@ -15,6 +14,7 @@ import {
 const MAX_RATE_LIMIT_RETRIES = 4;
 const MAX_CONCURRENT_REQUESTS = 3;
 const authStorage = sessionStorage;
+const likedSongsCover = new URL('../assets/images/liked_songs.png', import.meta.url).href;
 
 const createSpotifyError = (code, details = {}) => Object.assign(new Error(code), { code, details });
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -64,6 +64,34 @@ const throwIfAborted = (signal) => {
   if (signal?.aborted) {
     throw createSpotifyError('SPOTIFY_REQUEST_CANCELLED');
   }
+};
+
+const parseStoredNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const getTokenExpiryMs = (tokenData = {}) => {
+  const expiresInSeconds = Number(tokenData.expires_in);
+  if (Number.isFinite(expiresInSeconds) && expiresInSeconds > 0) {
+    return expiresInSeconds * 1000;
+  }
+  return SPOTIFY_CONFIG.tokenExpiry;
+};
+
+const getStoredAccessTokenExpiresAt = () => {
+  const expiresAt = parseStoredNumber(authStorage.getItem(STORAGE_KEYS.accessTokenExpiresAt));
+  if (expiresAt > 0) return expiresAt;
+
+  const legacyTimestamp = parseStoredNumber(authStorage.getItem(STORAGE_KEYS.accessTokenTimestamp));
+  if (legacyTimestamp > 0) {
+    const migratedExpiresAt = legacyTimestamp + SPOTIFY_CONFIG.tokenExpiry;
+    authStorage.setItem(STORAGE_KEYS.accessTokenExpiresAt, String(migratedExpiresAt));
+    authStorage.removeItem(STORAGE_KEYS.accessTokenTimestamp);
+    return migratedExpiresAt;
+  }
+
+  return 0;
 };
 
 export const spotify = {
@@ -127,8 +155,10 @@ export const spotify = {
       if (response.ok) {
         const tokenData = await response.json();
         if (tokenData.access_token) {
+          const expiresAt = Date.now() + getTokenExpiryMs(tokenData);
           authStorage.setItem(STORAGE_KEYS.accessToken, tokenData.access_token);
-          authStorage.setItem(STORAGE_KEYS.accessTokenTimestamp, Date.now().toString());
+          authStorage.setItem(STORAGE_KEYS.accessTokenExpiresAt, String(expiresAt));
+          authStorage.removeItem(STORAGE_KEYS.accessTokenTimestamp);
           authStorage.removeItem(STORAGE_KEYS.codeVerifier);
           authStorage.removeItem(STORAGE_KEYS.oauthState);
           return true;
@@ -147,12 +177,18 @@ export const spotify = {
     }
   },
 
-  // Check if session is valid (1 hour window)
+  // Check if session is valid based on Spotify's expires_in value.
   isLoggedIn() {
     const token = authStorage.getItem(STORAGE_KEYS.accessToken);
-    const timestamp = authStorage.getItem(STORAGE_KEYS.accessTokenTimestamp);
-    if (!token || !timestamp) return false;
-    return Date.now() - parseInt(timestamp, 10) < SPOTIFY_CONFIG.tokenExpiry;
+    if (!token) return false;
+
+    const expiresAt = getStoredAccessTokenExpiresAt();
+    if (!expiresAt || Date.now() >= expiresAt) {
+      this.clearAuth();
+      return false;
+    }
+
+    return true;
   },
 
   // Logout
@@ -163,6 +199,7 @@ export const spotify = {
 
   clearAuth() {
     authStorage.removeItem(STORAGE_KEYS.accessToken);
+    authStorage.removeItem(STORAGE_KEYS.accessTokenExpiresAt);
     authStorage.removeItem(STORAGE_KEYS.accessTokenTimestamp);
     authStorage.removeItem(STORAGE_KEYS.codeVerifier);
     authStorage.removeItem(STORAGE_KEYS.oauthState);
@@ -182,7 +219,7 @@ export const spotify = {
 
     try {
       const token = authStorage.getItem(STORAGE_KEYS.accessToken);
-      if (!token) {
+      if (!token || !this.isLoggedIn()) {
         throw createSpotifyError('SPOTIFY_AUTH_EXPIRED');
       }
 

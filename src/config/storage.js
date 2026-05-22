@@ -2,6 +2,8 @@ const STORAGE_NAMESPACE = 'spotti-spaghetti';
 
 export const STORAGE_KEYS = {
   accessToken: `${STORAGE_NAMESPACE}:access-token`,
+  accessTokenExpiresAt: `${STORAGE_NAMESPACE}:access-token-expires-at`,
+  // Legacy key kept for smooth migration from timestamp-based Spotify sessions.
   accessTokenTimestamp: `${STORAGE_NAMESPACE}:access-token-timestamp`,
   codeVerifier: `${STORAGE_NAMESPACE}:code-verifier`,
   language: `${STORAGE_NAMESPACE}:language`,
