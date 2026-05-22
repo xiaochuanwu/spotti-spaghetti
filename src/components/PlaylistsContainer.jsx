@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpDown, ArrowUp, ArrowDown, FileArchive, Music, Loader2, ExternalLink } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, FileArchive, Music, Loader2, ExternalLink, X } from 'lucide-react';
 import { useI18n } from '../i18n';
 
 export const PlaylistsContainer = ({ 
@@ -8,13 +8,18 @@ export const PlaylistsContainer = ({
   onExportAll, 
   exportingState,
   viewMode,
-  onPreview
+  onPreview,
+  selectedPlaylistIds: controlledSelectedPlaylistIds,
+  onSelectedPlaylistIdsChange,
+  showTitle = true,
 }) => {
   const { t } = useI18n();
   const [sortColumn, setSortColumn] = useState(null);
   const [sortDirection, setSortDirection] = useState('desc');
-  const [selectedPlaylistIds, setSelectedPlaylistIds] = useState(() => new Set());
+  const [internalSelectedPlaylistIds, setInternalSelectedPlaylistIds] = useState(() => new Set());
   const selectAllRef = useRef(null);
+  const selectedPlaylistIds = controlledSelectedPlaylistIds || internalSelectedPlaylistIds;
+  const setSelectedPlaylistIds = onSelectedPlaylistIdsChange || setInternalSelectedPlaylistIds;
 
   const handleSort = (column) => {
     if (sortColumn === column) {
@@ -104,7 +109,7 @@ export const PlaylistsContainer = ({
 
   const renderGridView = () => {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 animate-fade-in-up">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4 md:gap-5 animate-fade-in-up">
         {sortedPlaylists.map((playlist, i) => {
           const isCurrentExporting = exportingState.isExporting && exportingState.activePlaylistId === playlist.id;
           const isAnyExporting = exportingState.isExporting;
@@ -153,7 +158,8 @@ export const PlaylistsContainer = ({
               <div className="flex-1 flex flex-col justify-between">
                 <div className="min-w-0">
                   <div className="flex items-start gap-1 justify-between mb-0.5">
-                    <button 
+                    <button
+                      type="button"
                       onClick={() => onPreview && onPreview(playlist)}
                       className="font-bold text-[#1d1d1f] dark:text-[#f5f5f7] text-sm md:text-base leading-tight truncate hover:underline hover:text-[#0071e3] dark:hover:text-[#30a2ff] text-left block flex-1 cursor-pointer"
                     >
@@ -191,6 +197,7 @@ export const PlaylistsContainer = ({
                   </span>
 
                   <button
+                    type="button"
                     onClick={() => onExportSingle(playlist)}
                     disabled={isAnyExporting}
                     className="inline-flex items-center justify-center bg-[#e8e8ed] dark:bg-[#2d2d30] hover:bg-[#0071e3] disabled:bg-neutral-200 dark:disabled:bg-neutral-800/40 text-[#0071e3] hover:text-white disabled:text-neutral-400 dark:disabled:text-neutral-600 px-4 py-1 rounded-full text-xs font-bold tracking-tight cursor-pointer transition-all duration-200 ease-out active:scale-95 disabled:cursor-not-allowed uppercase"
@@ -303,7 +310,8 @@ export const PlaylistsContainer = ({
 
                     <td className="p-2.5 font-medium">
                       <div className="flex items-center gap-1.5">
-                        <button 
+                        <button
+                          type="button"
                           onClick={() => onPreview && onPreview(playlist)}
                           className="hover:underline text-[#1d1d1f] dark:text-[#f5f5f7] hover:text-[#0071e3] dark:hover:text-[#30a2ff] cursor-pointer font-medium text-left"
                         >
@@ -340,6 +348,7 @@ export const PlaylistsContainer = ({
 
                     <td className="p-2.5 text-right">
                       <button
+                        type="button"
                         onClick={() => onExportSingle(playlist)}
                         disabled={isAnyExporting}
                         className="inline-flex items-center justify-center bg-[#e8e8ed] dark:bg-[#2d2d30] hover:bg-[#0071e3] disabled:bg-neutral-200 dark:disabled:bg-neutral-800/40 text-[#0071e3] hover:text-white disabled:text-neutral-400 dark:disabled:text-neutral-600 px-4 py-1 rounded-full text-xs font-bold tracking-tight cursor-pointer transition-all duration-200 ease-out active:scale-95 disabled:cursor-not-allowed uppercase"
@@ -367,11 +376,13 @@ export const PlaylistsContainer = ({
   return (
     <div className="w-full flex flex-col gap-6 select-none">
       <div className="flex flex-col gap-3 border-b border-[#e5e5e7] dark:border-[#333336] pb-4 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-xs font-bold text-[#86868b] tracking-wider uppercase">
-          {t('playlists.title')}
-        </h3>
+        {showTitle && (
+          <h3 className="text-xs font-bold text-[#86868b] tracking-wider uppercase">
+            {t('playlists.title')}
+          </h3>
+        )}
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className={`flex flex-wrap items-center gap-2 ${showTitle ? '' : 'w-full sm:justify-end'}`}>
           <label className="inline-flex items-center gap-2 rounded-full border border-[#e5e5e7] dark:border-[#333336] bg-white dark:bg-[#1d1d1f] px-3 py-2 text-xs font-bold text-[#6e6e73] dark:text-[#a1a1a6]">
             <input
               ref={selectAllRef}
@@ -389,9 +400,10 @@ export const PlaylistsContainer = ({
             <button
               type="button"
               onClick={clearSelection}
-              className="rounded-full px-3 py-2 text-xs font-bold text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white"
+              className="inline-flex items-center gap-1 rounded-full px-3 py-2 text-xs font-bold text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white"
             >
-              {t('playlists.clearSelection')}
+              <X size={13} aria-hidden="true" />
+              <span>{t('playlists.clearSelection')}</span>
             </button>
           )}
 

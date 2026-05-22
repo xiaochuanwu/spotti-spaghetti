@@ -1,15 +1,15 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { exporter } from './services/exporter';
 import { Header } from './components/Header';
-import { SearchFilter } from './components/SearchFilter';
-import { PlaylistsContainer } from './components/PlaylistsContainer';
 import { ProgressBar } from './components/ProgressBar';
 import { Footer } from './components/Footer';
 import { ConfirmDialog } from './components/ConfirmDialog';
-import { WorkspacePanel } from './components/workspace/WorkspacePanel';
+import { AppShell } from './components/layout/AppShell.jsx';
+import { SidebarNav } from './components/layout/SidebarNav.jsx';
+import { WorkspaceView } from './components/layout/WorkspaceView.jsx';
+import { PlaybackPanel } from './components/layout/PlaybackPanel.jsx';
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useI18n } from './i18n';
-import { NowPlayingPanel } from './components/NowPlayingPanel.jsx';
 import { PlaylistPreviewModal } from './components/PlaylistPreviewModal';
 import { useThemePreference } from './hooks/useThemePreference.js';
 import { batchSession } from './services/batchSession.js';
@@ -27,6 +27,8 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [viewMode, setViewMode] = useState('grid');
+  const [activeTool, setActiveTool] = useState('library');
+  const [selectedPlaylistIds, setSelectedPlaylistIds] = useState(() => new Set());
   const [previewPlaylist, setPreviewPlaylist] = useState(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [historySnapshots, setHistorySnapshots] = useState([]);
@@ -154,6 +156,8 @@ export default function App() {
     currentProvider.logout();
     setIsLoggedIn(false);
     setPlaylists([]);
+    setSelectedPlaylistIds(new Set());
+    setActiveTool('library');
     setErrorMessage('');
     setStatusMessage('');
   };
@@ -503,20 +507,21 @@ export default function App() {
   }, [localizedPlaylists, searchQuery]);
 
   return (
-    <div className="relative flex-1 w-full max-w-6xl mx-auto flex flex-col px-4 pb-4 md:px-6 md:pb-6 min-h-screen">
-      {/* Ambient dark-mode page glow */}
-      <div 
-        className="fixed inset-0 pointer-events-none z-0 hidden dark:block"
-        aria-hidden="true"
-      >
-        <div 
-          className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full opacity-[0.07] blur-[120px] will-change-transform"
-          style={{
-            background: 'conic-gradient(from 180deg, #0071e3, #5e5ce6, #bf5af2, #0071e3)',
-            animation: 'rotate-glow 20s linear infinite',
-          }}
-        />
-      </div>
+    <div className="relative flex-1 w-full max-w-[1680px] mx-auto flex flex-col px-4 pb-4 md:px-6 md:pb-6 min-h-screen">
+      {!isLoggedIn && (
+        <div
+          className="fixed inset-0 pointer-events-none z-0 hidden dark:block"
+          aria-hidden="true"
+        >
+          <div
+            className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full opacity-[0.07] blur-[120px] will-change-transform"
+            style={{
+              background: 'conic-gradient(from 180deg, #0071e3, #5e5ce6, #bf5af2, #0071e3)',
+              animation: 'rotate-glow 20s linear infinite',
+            }}
+          />
+        </div>
+      )}
 
       <div className="relative z-10 flex-1 flex flex-col">
         <Header 
@@ -524,9 +529,10 @@ export default function App() {
           onLogout={handleLogout}
           themePreference={themePreference}
           onSetTheme={setTheme}
+          showHero={!isLoggedIn}
         />
 
-        <main className="flex-1 flex flex-col pb-10 md:pb-14">
+        <main className={`flex-1 flex flex-col pb-10 md:pb-14 ${isLoggedIn ? 'pt-16' : ''}`}>
           {errorMessage && (
             <div 
               id="error" 
@@ -558,47 +564,54 @@ export default function App() {
                 <p className="text-xs font-semibold text-[#86868b] animate-pulse">{t('loading.playlists')}</p>
               </div>
             ) : (
-              <>
-                <SearchFilter 
-                  value={searchQuery} 
-                  onChange={setSearchQuery} 
-                  viewMode={viewMode}
-                  onViewModeChange={setViewMode}
-                />
-                
-                <div id="subtitle" className="text-center font-bold text-[#86868b] text-[11px] tracking-wider uppercase mb-6 select-none animate-fade-in">
-                  {t('playlists.count', filteredPlaylists.length)}
-                </div>
-
-                <WorkspacePanel
-                  batchSessionState={batchSessionState}
-                  history={historySnapshots}
-                  isBusy={exportingState.isExporting}
-                  latestDiff={latestDiff}
-                  onClearHistory={clearHistory}
-                  onDeleteHistory={deleteHistorySnapshot}
-                  onExportHistory={exportLocalHistory}
-                  onImportHistory={importLocalHistory}
-                  formatError={getErrorText}
-                  onRestorePlaylist={handleRestorePlaylist}
-                  onRestoreSnapshot={handleRestoreSnapshot}
-                  onRetryBatch={handleRetryFailedBatch}
-                />
-
-                <NowPlayingPanel provider={currentProvider} formatError={getErrorText} />
-
-                <PlaylistsContainer 
-                  playlists={filteredPlaylists}
-                  onExportSingle={handleExportSingle}
-                  onExportAll={handleExportAll}
-                  exportingState={exportingState}
-                  viewMode={viewMode}
-                  onPreview={(playlist) => {
-                    setPreviewPlaylist(playlist);
-                    setIsPreviewOpen(true);
-                  }}
-                />
-              </>
+              <AppShell
+                sidebar={(
+                  <SidebarNav
+                    activeTool={activeTool}
+                    batchFailedCount={batchSessionState?.failed?.length || 0}
+                    isBusy={exportingState.isExporting}
+                    onRetryBatch={handleRetryFailedBatch}
+                    onToolChange={setActiveTool}
+                    provider={currentProvider}
+                  />
+                )}
+                main={(
+                  <WorkspaceView
+                    activeTool={activeTool}
+                    playlists={filteredPlaylists}
+                    playlistCount={filteredPlaylists.length}
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                    viewMode={viewMode}
+                    onViewModeChange={setViewMode}
+                    onExportSingle={handleExportSingle}
+                    onExportAll={handleExportAll}
+                    exportingState={exportingState}
+                    selectedPlaylistIds={selectedPlaylistIds}
+                    onSelectedPlaylistIdsChange={setSelectedPlaylistIds}
+                    history={historySnapshots}
+                    latestDiff={latestDiff}
+                    formatError={getErrorText}
+                    onClearHistory={clearHistory}
+                    onDeleteHistory={deleteHistorySnapshot}
+                    onExportHistory={exportLocalHistory}
+                    onImportHistory={importLocalHistory}
+                    onRestorePlaylist={handleRestorePlaylist}
+                    onRestoreSnapshot={handleRestoreSnapshot}
+                    onToolChange={setActiveTool}
+                    onPreview={(playlist) => {
+                      setPreviewPlaylist(playlist);
+                      setIsPreviewOpen(true);
+                    }}
+                  />
+                )}
+                inspector={(
+                  <PlaybackPanel
+                    formatError={getErrorText}
+                    provider={currentProvider}
+                  />
+                )}
+              />
             )
           ) : (
             !isLoadingPlaylists && (

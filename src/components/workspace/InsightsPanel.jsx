@@ -15,7 +15,7 @@ const MiniBar = ({ item, max }) => (
 );
 
 const MetricCard = ({ label, value }) => (
-  <div className="rounded-xl bg-[#fafafa] dark:bg-[#161617] p-3">
+  <div className="rounded-lg bg-[#fafafa] dark:bg-[#161617] p-3">
     <p className="text-lg font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">{value}</p>
     <p className="text-[10px] text-[#86868b]">{label}</p>
   </div>
@@ -28,7 +28,7 @@ const TrackMetricCard = ({ label, track }) => {
   const value = track ? `${minutes}:${String(seconds).padStart(2, '0')}` : '-';
 
   return (
-    <div className="rounded-xl bg-[#fafafa] dark:bg-[#161617] p-3">
+    <div className="rounded-lg bg-[#fafafa] dark:bg-[#161617] p-3">
       <p className="text-lg font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">{value}</p>
       <p className="text-[10px] text-[#86868b]">{label}</p>
       {track && (
@@ -63,9 +63,9 @@ export const InsightsPanel = ({ history, selectedHistoryId, onSelectHistory }) =
   const maxYearCount = useMemo(() => Math.max(...insights.topYears.map(item => item.count), 0), [insights]);
 
   return (
-    <div className="mt-4 bg-white dark:bg-[#1d1d1f] border border-[#e5e5e7] dark:border-[#333336]/40 rounded-2xl p-4 shadow-sm dark:shadow-none">
-      <div className="rounded-xl bg-[#fafafa] dark:bg-[#161617] p-3">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_18rem]">
+    <div className="mt-4 bg-white dark:bg-[#1d1d1f] border border-[#e5e5e7] dark:border-[#333336]/40 rounded-lg p-4 shadow-sm dark:shadow-none">
+      <div className="rounded-lg bg-[#fafafa] dark:bg-[#161617] p-3">
+        <div className="grid gap-3">
           <div className="flex flex-1 flex-col gap-1.5">
             <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#86868b]">
               <Clock3 size={13} />
@@ -84,7 +84,7 @@ export const InsightsPanel = ({ history, selectedHistoryId, onSelectHistory }) =
               <BarChart3 size={13} />
               {t('insights.currentRecord')}
             </span>
-            <div className="flex min-h-[58px] flex-col justify-center rounded-xl border border-[#e5e5e7] dark:border-[#333336] bg-white dark:bg-[#1d1d1f] px-3 py-2">
+            <div className="flex min-h-[58px] flex-col justify-center rounded-lg border border-[#e5e5e7] dark:border-[#333336] bg-white dark:bg-[#1d1d1f] px-3 py-2">
               <p className="truncate text-xs font-bold text-[#0071e3]">
                 {analysisSnapshot ? t('insights.currentSource', analysisSnapshot.playlistName) : t('insights.noHistory')}
               </p>
@@ -101,10 +101,10 @@ export const InsightsPanel = ({ history, selectedHistoryId, onSelectHistory }) =
       {insights.trackCount === 0 ? (
         <p className="mt-4 text-sm text-[#86868b]">{t('insights.empty')}</p>
       ) : (
-        <div className="mt-5 grid gap-5 lg:grid-cols-3">
-          <div className="lg:col-span-3">
+        <div className="mt-5 grid gap-5">
+          <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-[#86868b]">{t('insights.summary')}</p>
-            <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+            <div className="mt-2 grid grid-cols-2 gap-2">
               <MetricCard label={t('insights.tracks')} value={insights.trackCount} />
               <MetricCard label={t('insights.uniqueArtists')} value={insights.artistCount} />
               <MetricCard label={t('insights.albums')} value={insights.albumCount} />

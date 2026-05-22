@@ -13,7 +13,7 @@ const TrackList = ({ emptyLabel, items, title }) => {
   const { t } = useI18n();
 
   return (
-    <div className="rounded-xl bg-[#fafafa] dark:bg-[#161617] p-3">
+    <div className="rounded-lg bg-[#fafafa] dark:bg-[#161617] p-3">
       <p className="text-[11px] font-bold uppercase tracking-wider text-[#86868b]">{title}</p>
       {items.length === 0 ? (
         <p className="mt-2 text-xs text-[#86868b]">{emptyLabel}</p>
@@ -86,7 +86,7 @@ export const HistoryPanel = ({
   );
 
   return (
-    <div className="mt-4 bg-white dark:bg-[#1d1d1f] border border-[#e5e5e7] dark:border-[#333336]/40 rounded-2xl p-4 shadow-sm dark:shadow-none">
+    <div className="mt-4 bg-white dark:bg-[#1d1d1f] border border-[#e5e5e7] dark:border-[#333336]/40 rounded-lg p-4 shadow-sm dark:shadow-none">
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-xs font-bold uppercase tracking-wider text-[#86868b]">{t('history.title')}</h3>
@@ -147,14 +147,14 @@ export const HistoryPanel = ({
       ) : (
         <div className="grid gap-2">
           {latestHistory.map(item => (
-            <div key={item.id} className="flex items-center gap-3 rounded-xl bg-[#fafafa] dark:bg-[#161617] px-3 py-2">
+            <div key={item.id} className="flex flex-col gap-3 rounded-lg bg-[#fafafa] dark:bg-[#161617] px-3 py-2 sm:flex-row sm:items-center">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]">{item.playlistName}</p>
                 <p className="text-[11px] text-[#86868b]">
                   {new Date(item.createdAt).toLocaleString()} · {item.trackCount} {t('playlists.tracks')}
                 </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
                 <button
                   onClick={() => onAnalyze(item.id)}
                   className="min-w-14 rounded-full bg-[#e8e8ed] px-3 py-1 text-[11px] font-bold text-[#0071e3] hover:bg-[#0071e3] hover:text-white dark:bg-[#2d2d30]"
@@ -189,7 +189,7 @@ export const HistoryPanel = ({
           <p className="mt-2 text-sm text-[#86868b]">{t('history.compareNeedsTwo')}</p>
         ) : (
           <>
-            <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <div className="mt-3 grid gap-3">
               <div className="flex flex-col gap-1.5">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-[#86868b]">{t('history.comparePlaylist')}</span>
                 <HistoryRecordSelect
@@ -227,20 +227,20 @@ export const HistoryPanel = ({
             {comparison && (
               <div className="mt-4">
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-xl bg-[#fafafa] dark:bg-[#161617] p-3">
+                <div className="rounded-lg bg-[#fafafa] dark:bg-[#161617] p-3">
                     <p className="text-lg font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">{comparison.added.length}</p>
                     <p className="text-[10px] text-[#86868b]">{t('history.compareAdded')}</p>
                   </div>
-                  <div className="rounded-xl bg-[#fafafa] dark:bg-[#161617] p-3">
+                  <div className="rounded-lg bg-[#fafafa] dark:bg-[#161617] p-3">
                     <p className="text-lg font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">{comparison.removed.length}</p>
                     <p className="text-[10px] text-[#86868b]">{t('history.compareRemoved')}</p>
                   </div>
-                  <div className="rounded-xl bg-[#fafafa] dark:bg-[#161617] p-3">
+                  <div className="rounded-lg bg-[#fafafa] dark:bg-[#161617] p-3">
                     <p className="text-lg font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">{comparison.unchangedCount}</p>
                     <p className="text-[10px] text-[#86868b]">{t('history.compareUnchanged')}</p>
                   </div>
                 </div>
-                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <div className="mt-3 grid gap-3">
                   <TrackList emptyLabel={t('history.compareNone')} items={comparison.added} title={t('history.compareAdded')} />
                   <TrackList emptyLabel={t('history.compareNone')} items={comparison.removed} title={t('history.compareRemoved')} />
                   <TrackList emptyLabel={t('history.compareNone')} items={comparison.unchanged} title={t('history.compareUnchanged')} />

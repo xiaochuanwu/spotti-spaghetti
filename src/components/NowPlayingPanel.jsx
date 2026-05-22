@@ -11,7 +11,7 @@ const formatDuration = (ms) => {
   return `${minutes}:${seconds}`;
 };
 
-export const NowPlayingPanel = ({ provider, formatError }) => {
+export const NowPlayingPanel = ({ provider, formatError, variant = 'default' }) => {
   const { t } = useI18n();
   const [nowPlaying, setNowPlaying] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -93,6 +93,308 @@ export const NowPlayingPanel = ({ provider, formatError }) => {
   const unavailableMessage = nowPlaying?.reason === 'unsupported_type'
     ? t('nowPlaying.unsupportedType', nowPlaying.currentlyPlayingType || t('nowPlaying.unknownType'))
     : t('nowPlaying.noActivePlayback');
+  const isPlayer = variant === 'player';
+  const isCompact = variant === 'compact';
+
+  if (isPlayer) {
+    return (
+      <section className="w-full animate-fade-in-up">
+        <div className="rounded-lg border border-[#e5e5e7] bg-white p-4 shadow-sm dark:border-[#333336]/60 dark:bg-[#1d1d1f] dark:shadow-none">
+          <div className="mb-4 flex items-center justify-end gap-2">
+            <label className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#86868b] transition-colors hover:bg-[#f5f5f7] dark:hover:bg-[#2d2d30]">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(event) => setAutoRefresh(event.target.checked)}
+                className="sr-only"
+                aria-label={t('nowPlaying.autoRefresh')}
+              />
+              <span className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                autoRefresh ? 'bg-[#0071e3]' : 'bg-[#d2d2d7] dark:bg-[#3a3a3c]'
+              }`}>
+                <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
+                  autoRefresh ? 'translate-x-4' : 'translate-x-0.5'
+                }`} />
+              </span>
+            </label>
+
+            <button
+              type="button"
+              onClick={() => fetchNowPlaying()}
+              disabled={isLoading}
+              aria-label={t('nowPlaying.refresh')}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-[#e8e8ed] text-[#0071e3] transition-colors hover:bg-[#0071e3] hover:text-white disabled:cursor-not-allowed disabled:text-[#86868b] dark:bg-[#2d2d30]"
+            >
+              {isLoading ? (
+                <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <RefreshCw size={16} aria-hidden="true" />
+              )}
+            </button>
+          </div>
+
+          {isLoading && !nowPlaying ? (
+            <div className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-lg bg-[#fafafa] px-4 py-8 text-center text-sm font-semibold text-[#86868b] dark:bg-[#161617]">
+              <Loader2 size={22} className="animate-spin text-[#0071e3]" aria-hidden="true" />
+              <span>{t('nowPlaying.loading')}</span>
+            </div>
+          ) : error ? (
+            <div className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-lg bg-red-50 px-4 py-8 text-center text-sm font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-200">
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={() => fetchNowPlaying()}
+                className="inline-flex items-center justify-center rounded-lg bg-white/80 px-3 py-2 text-xs font-bold text-red-700 transition-colors hover:bg-white dark:bg-red-900/40 dark:text-red-100"
+              >
+                {t('nowPlaying.refresh')}
+              </button>
+            </div>
+          ) : !isTrackAvailable ? (
+            <div className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-lg bg-[#fafafa] px-4 py-8 text-center text-sm font-semibold text-[#86868b] dark:bg-[#161617]">
+              <Music size={28} aria-hidden="true" />
+              <span>{unavailableMessage}</span>
+            </div>
+          ) : (
+            <div className="min-w-0">
+              <div className="mx-auto flex aspect-square w-full max-w-[260px] items-center justify-center overflow-hidden rounded-lg border border-black/[0.04] bg-[#f0f0f2] dark:border-white/[0.04] dark:bg-[#161617]">
+                {nowPlaying.albumCover ? (
+                  <img
+                    src={nowPlaying.albumCover}
+                    alt={t('nowPlaying.coverAlt', track.name)}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <Music className="h-12 w-12 text-[#86868b]" aria-hidden="true" />
+                )}
+              </div>
+
+              <div className="mt-4 min-w-0 text-center">
+                <div className="mb-2 flex items-center justify-center gap-2">
+                  {nowPlaying.isPlaying ? (
+                    <PlayCircle size={16} className="shrink-0 text-[#16a34a]" aria-hidden="true" />
+                  ) : (
+                    <PauseCircle size={16} className="shrink-0 text-[#86868b]" aria-hidden="true" />
+                  )}
+                  <span className="truncate text-xs font-bold text-[#6e6e73] dark:text-[#a1a1a6]">
+                    {nowPlaying.isPlaying ? t('nowPlaying.playing') : t('nowPlaying.paused')}
+                  </span>
+                  {track.explicit && (
+                    <span
+                      className="rounded bg-[#3a3a3c] px-1.5 py-0.5 text-[10px] font-black text-white"
+                      aria-label={t('nowPlaying.explicit')}
+                      title={t('nowPlaying.explicit')}
+                    >
+                      E
+                    </span>
+                  )}
+                </div>
+                <p className="truncate text-base font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
+                  {track.name}
+                </p>
+                <p className="mt-1 truncate text-sm font-semibold text-[#6e6e73] dark:text-[#a1a1a6]">
+                  {track.artistNames || t('preview.unknownArtist')}
+                </p>
+                <p className="truncate text-xs text-[#86868b]">
+                  {track.albumName || t('preview.unknownAlbum')}
+                </p>
+              </div>
+
+              <div className="mt-5">
+                <div
+                  role="progressbar"
+                  aria-label={t('nowPlaying.progress')}
+                  aria-valuemin={0}
+                  aria-valuenow={progressMs}
+                  aria-valuemax={durationMs}
+                  aria-valuetext={`${formatDuration(progressMs)} / ${formatDuration(durationMs)}`}
+                  className="h-2 overflow-hidden rounded-full bg-[#e8e8ed] dark:bg-[#2d2d30]"
+                >
+                  <div
+                    className="h-full rounded-full bg-[#0071e3] transition-[width]"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-[#86868b]">
+                  <span>{formatDuration(progressMs)}</span>
+                  <span>{formatDuration(durationMs)}</span>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[11px] font-semibold text-[#86868b] dark:bg-[#2d2d30]">
+                  {t('nowPlaying.isrc')}: {track.isrc || t('nowPlaying.notAvailable')}
+                </span>
+                {nowPlaying.externalUrl && (
+                  <a
+                    href={nowPlaying.externalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={t('nowPlaying.openSpotify', track.name)}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#e8e8ed] text-[#0071e3] transition-colors hover:bg-[#0071e3] hover:text-white dark:bg-[#2d2d30]"
+                  >
+                    <ExternalLink size={15} aria-hidden="true" />
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  if (isCompact) {
+    return (
+      <section className="w-full animate-fade-in-up">
+        <div className="rounded-lg border border-[#e5e5e7] bg-white p-3 shadow-sm dark:border-[#333336]/60 dark:bg-[#1d1d1f] dark:shadow-none">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#86868b]">
+                {t('nowPlaying.title')}
+              </p>
+              <p className="mt-0.5 truncate text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
+                {isTrackAvailable ? track.name : t('nowPlaying.emptyTitle')}
+              </p>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1.5">
+              <label className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#86868b] hover:bg-[#f5f5f7] dark:hover:bg-[#2d2d30]">
+                <input
+                  type="checkbox"
+                  checked={autoRefresh}
+                  onChange={(event) => setAutoRefresh(event.target.checked)}
+                  className="sr-only"
+                  aria-label={t('nowPlaying.autoRefresh')}
+                />
+                <span className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+                  autoRefresh ? 'bg-[#0071e3]' : 'bg-[#d2d2d7] dark:bg-[#3a3a3c]'
+                }`}>
+                  <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${
+                    autoRefresh ? 'translate-x-3.5' : 'translate-x-0.5'
+                  }`} />
+                </span>
+              </label>
+
+              <button
+                type="button"
+                onClick={() => fetchNowPlaying()}
+                disabled={isLoading}
+                aria-label={t('nowPlaying.refresh')}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#e8e8ed] text-[#0071e3] transition-colors hover:bg-[#0071e3] hover:text-white disabled:cursor-not-allowed disabled:text-[#86868b] dark:bg-[#2d2d30]"
+              >
+                {isLoading ? (
+                  <Loader2 size={15} className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <RefreshCw size={15} aria-hidden="true" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {isLoading && !nowPlaying ? (
+            <div className="flex min-h-12 items-center gap-2 rounded-lg bg-[#fafafa] px-3 py-2 text-xs font-semibold text-[#86868b] dark:bg-[#161617]">
+              <Loader2 size={15} className="animate-spin text-[#0071e3]" aria-hidden="true" />
+              <span className="truncate">{t('nowPlaying.loading')}</span>
+            </div>
+          ) : error ? (
+            <div className="flex min-h-12 items-center justify-between gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-200">
+              <span className="line-clamp-2">{error}</span>
+              <button
+                type="button"
+                onClick={() => fetchNowPlaying()}
+                aria-label={t('nowPlaying.refresh')}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/80 text-red-700 transition-colors hover:bg-white dark:bg-red-900/40 dark:text-red-100"
+              >
+                <RefreshCw size={13} aria-hidden="true" />
+              </button>
+            </div>
+          ) : !isTrackAvailable ? (
+            <div className="flex min-h-12 items-center gap-2 rounded-lg bg-[#fafafa] px-3 py-2 text-xs font-semibold text-[#86868b] dark:bg-[#161617]">
+              <Music size={15} className="shrink-0" aria-hidden="true" />
+              <span className="line-clamp-2">{unavailableMessage}</span>
+            </div>
+          ) : (
+            <div className="min-w-0">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-black/[0.04] bg-[#f0f0f2] dark:border-white/[0.04] dark:bg-[#161617]">
+                  {nowPlaying.albumCover ? (
+                    <img
+                      src={nowPlaying.albumCover}
+                      alt={t('nowPlaying.coverAlt', track.name)}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Music className="h-5 w-5 text-[#86868b]" aria-hidden="true" />
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    {nowPlaying.isPlaying ? (
+                      <PlayCircle size={14} className="shrink-0 text-[#16a34a]" aria-hidden="true" />
+                    ) : (
+                      <PauseCircle size={14} className="shrink-0 text-[#86868b]" aria-hidden="true" />
+                    )}
+                    <span className="truncate text-[11px] font-bold text-[#6e6e73] dark:text-[#a1a1a6]">
+                      {nowPlaying.isPlaying ? t('nowPlaying.playing') : t('nowPlaying.paused')}
+                    </span>
+                    {track.explicit && (
+                      <span
+                        className="rounded bg-[#3a3a3c] px-1 py-0.5 text-[9px] font-black text-white"
+                        aria-label={t('nowPlaying.explicit')}
+                        title={t('nowPlaying.explicit')}
+                      >
+                        E
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 truncate text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
+                    {track.name}
+                  </p>
+                  <p className="truncate text-[11px] font-semibold text-[#6e6e73] dark:text-[#a1a1a6]">
+                    {track.artistNames || t('preview.unknownArtist')}
+                  </p>
+                </div>
+
+                {nowPlaying.externalUrl && (
+                  <a
+                    href={nowPlaying.externalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={t('nowPlaying.openSpotify', track.name)}
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#e8e8ed] text-[#0071e3] transition-colors hover:bg-[#0071e3] hover:text-white dark:bg-[#2d2d30]"
+                  >
+                    <ExternalLink size={14} aria-hidden="true" />
+                  </a>
+                )}
+              </div>
+
+              <div className="mt-3">
+                <div
+                  role="progressbar"
+                  aria-label={t('nowPlaying.progress')}
+                  aria-valuemin={0}
+                  aria-valuenow={progressMs}
+                  aria-valuemax={durationMs}
+                  aria-valuetext={`${formatDuration(progressMs)} / ${formatDuration(durationMs)}`}
+                  className="h-1.5 overflow-hidden rounded-full bg-[#e8e8ed] dark:bg-[#2d2d30]"
+                >
+                  <div
+                    className="h-full rounded-full bg-[#0071e3] transition-[width]"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <div className="mt-1.5 flex items-center justify-between text-[10px] font-semibold text-[#86868b]">
+                  <span>{formatDuration(progressMs)}</span>
+                  <span>{formatDuration(durationMs)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="w-full mb-6 animate-fade-in-up">

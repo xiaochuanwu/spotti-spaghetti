@@ -14,7 +14,7 @@ const langOptions = [
   { value: 'en', emoji: '🇺🇸', key: 'lang.en' },
 ];
 
-export const Header = ({ isLoggedIn, onLogout, themePreference, onSetTheme }) => {
+export const Header = ({ isLoggedIn, onLogout, themePreference, onSetTheme, showHero = true }) => {
   const { t, locale, changeLocale } = useI18n();
   const [themeOpen, setThemeOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
@@ -173,20 +173,21 @@ export const Header = ({ isLoggedIn, onLogout, themePreference, onSetTheme }) =>
       </nav>
 
       {/* Hero Display Section */}
-      <header 
-        role="banner" 
-        className="w-full pt-20 pb-8 text-center select-none animate-fade-in-down"
-      >
-        <h1 className="text-4xl md:text-5xl lg:text-[56px] font-bold tracking-[-0.03em] text-[#1d1d1f] dark:text-[#f5f5f7] mb-3 leading-[1.05]">
-          {t('hero.title')}
-        </h1>
-        
-        <p className="text-[15px] md:text-base text-[#6e6e73] dark:text-[#a1a1a6] font-normal max-w-md mx-auto leading-relaxed tracking-[-0.01em]">
-          {t('hero.subtitle.line1')}<br/>
-          {t('hero.subtitle.line2')}
-        </p>
+      {showHero && (
+        <header
+          role="banner"
+          className="w-full pt-20 pb-8 text-center select-none animate-fade-in-down"
+        >
+          <h1 className="text-4xl md:text-5xl lg:text-[56px] font-bold tracking-[-0.03em] text-[#1d1d1f] dark:text-[#f5f5f7] mb-3 leading-[1.05]">
+            {t('hero.title')}
+          </h1>
 
-      </header>
+          <p className="text-[15px] md:text-base text-[#6e6e73] dark:text-[#a1a1a6] font-normal max-w-md mx-auto leading-relaxed tracking-[-0.01em]">
+            {t('hero.subtitle.line1')}<br/>
+            {t('hero.subtitle.line2')}
+          </p>
+        </header>
+      )}
     </>
   );
 };

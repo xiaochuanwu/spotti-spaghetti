@@ -5,13 +5,13 @@ export const SearchFilter = ({
   value, 
   onChange, 
   viewMode, 
-  onViewModeChange 
+  onViewModeChange,
+  className = '',
 }) => {
   const { t } = useI18n();
 
   return (
-    <div className="w-full flex flex-col sm:flex-row items-center gap-4 mb-6 select-none animate-fade-in-up">
-      {/* Search Input Box */}
+    <div className={`w-full flex flex-col sm:flex-row items-center gap-3 select-none animate-fade-in-up ${className}`}>
       <div className="relative flex-1 w-full">
         <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#86868b]">
           <Search size={15} />
@@ -25,9 +25,9 @@ export const SearchFilter = ({
         />
       </div>
 
-      {/* Segmented Control View Switcher */}
       <div className="flex items-center bg-[#e8e8ed] dark:bg-[#1d1d1f] p-1 rounded-xl border border-[#d2d2d7] dark:border-[#333336] shrink-0">
         <button
+          type="button"
           onClick={() => onViewModeChange('grid')}
           aria-label={t('search.grid')}
           className={`p-2 rounded-lg cursor-pointer transition-all duration-150 ${
@@ -39,6 +39,7 @@ export const SearchFilter = ({
           <LayoutGrid size={15} />
         </button>
         <button
+          type="button"
           onClick={() => onViewModeChange('list')}
           aria-label={t('search.list')}
           className={`p-2 rounded-lg cursor-pointer transition-all duration-150 ${
