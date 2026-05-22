@@ -127,6 +127,25 @@ export const en = {
   'insights.years': 'Years',
   'batch.retryFailed': (n) => `Retry failed (${n})`,
 
+  // Now Playing
+  'nowPlaying.title': 'Now Playing',
+  'nowPlaying.emptyTitle': 'Current playback',
+  'nowPlaying.loading': 'Loading current playback...',
+  'nowPlaying.error': 'Unable to load current playback.',
+  'nowPlaying.noActivePlayback': 'No track is currently playing.',
+  'nowPlaying.unsupportedType': (type) => `Current playback is not a track: ${type}`,
+  'nowPlaying.unknownType': 'unknown type',
+  'nowPlaying.playing': 'Playing',
+  'nowPlaying.paused': 'Paused',
+  'nowPlaying.refresh': 'Refresh now playing',
+  'nowPlaying.autoRefresh': 'Auto refresh',
+  'nowPlaying.progress': 'Playback progress',
+  'nowPlaying.explicit': 'Explicit badge',
+  'nowPlaying.isrc': 'ISRC',
+  'nowPlaying.notAvailable': 'N/A',
+  'nowPlaying.openSpotify': (name) => `Open ${name} on Spotify`,
+  'nowPlaying.coverAlt': (name) => `${name} cover`,
+
   // Progress
   'progress.batchTitle': 'Batch exporting playlists',
   'progress.singleTitle': 'Exporting playlist tracks',

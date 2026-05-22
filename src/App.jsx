@@ -9,6 +9,7 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import { WorkspacePanel } from './components/workspace/WorkspacePanel';
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useI18n } from './i18n';
+import { NowPlayingPanel } from './components/NowPlayingPanel.jsx';
 import { PlaylistPreviewModal } from './components/PlaylistPreviewModal';
 import { useThemePreference } from './hooks/useThemePreference.js';
 import { batchSession } from './services/batchSession.js';
@@ -583,6 +584,8 @@ export default function App() {
                   onRestoreSnapshot={handleRestoreSnapshot}
                   onRetryBatch={handleRetryFailedBatch}
                 />
+
+                <NowPlayingPanel provider={currentProvider} formatError={getErrorText} />
 
                 <PlaylistsContainer 
                   playlists={filteredPlaylists}

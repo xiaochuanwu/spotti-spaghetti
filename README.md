@@ -14,6 +14,7 @@ Spotti Spaghetti uses Spotify PKCE OAuth directly in the browser. It does not ne
 - Analyze a selected export snapshot from local history
 - Show track, artist, album, genre, label, duration, popularity, explicit, release year, decade, discovery, and popularity-range stats
 - Export, delete, or clear local export history
+- Show a read-only Spotify Now Playing panel with cover art, track metadata, progress, ISRC, and manual/automatic refresh
 - Preview playlist tracks with paged loading
 - Export platform-neutral fields including provider, provider track ID, provider playlist ID, and ISRC
 - Use a provider abstraction layer internally; Spotify is the only registered provider today
@@ -95,7 +96,16 @@ For production:
 https://your-domain.example/
 ```
 
-The app requests scopes for reading playlists and saved tracks. Restoring playlists also needs playlist modification scopes.
+The app requests scopes for reading playlists, saved tracks, and the current playback item. Restoring playlists also needs playlist modification scopes.
+
+Current Spotify scopes:
+
+- `playlist-read-private`
+- `playlist-read-collaborative`
+- `user-library-read`
+- `user-read-currently-playing`: used only by the read-only Now Playing panel
+- `playlist-modify-private`
+- `playlist-modify-public`
 
 ## Scripts
 
@@ -126,7 +136,7 @@ docker run --rm -p 8080:80 spotti-spaghetti
 
 Spotify tokens are stored in `sessionStorage` with an absolute expiration time based on Spotify's `expires_in` response. Preferences and batch retry state are stored in `localStorage`. Export history, comparisons, imported history JSON, and local history exports use only this browser's IndexedDB data.
 
-Normal Spotify export, restore, history, preview, and insight workflows still run entirely in the browser and do not need an application backend. No playlist data is sent to an application backend by the current app.
+Normal Spotify export, restore, history, preview, Now Playing, and insight workflows still run entirely in the browser and do not need an application backend. No playlist data is sent to an application backend by the current app.
 
 ## Roadmap
 

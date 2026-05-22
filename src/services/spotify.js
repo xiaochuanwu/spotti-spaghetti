@@ -1,6 +1,7 @@
 // Spotify Web API Service with PKCE Authorization
 import { STORAGE_KEYS } from '../config/storage.js';
 import { SPOTIFY_CONFIG, getSpotifyClientId } from '../config/spotify.js';
+import { MUSIC_PROVIDERS, normalizeTrack } from './musicModel.js';
 import {
   chunkArray,
   enrichTracksWithMetadata,
@@ -330,6 +331,68 @@ export const spotify = {
 
     const response = await this.apiCall(`https://api.spotify.com/v1/search?${params.toString()}`);
     return response?.tracks?.items || [];
+  },
+
+  async getNowPlaying(options = {}) {
+    const fetchedAt = new Date().toISOString();
+    const response = await this.apiCall(
+      'https://api.spotify.com/v1/me/player/currently-playing',
+      0,
+      null,
+      0,
+      options
+    );
+
+    if (!response?.item) {
+      return {
+        isAvailable: false,
+        reason: 'no_active_playback',
+        fetchedAt,
+      };
+    }
+
+    const currentlyPlayingType = response.currently_playing_type || 'unknown';
+    if (currentlyPlayingType !== 'track') {
+      return {
+        isAvailable: false,
+        reason: 'unsupported_type',
+        currentlyPlayingType,
+        isPlaying: Boolean(response.is_playing),
+        progressMs: response.progress_ms ?? 0,
+        fetchedAt,
+      };
+    }
+
+    const track = response.item;
+    const normalizedTrack = normalizeTrack({
+      provider: MUSIC_PROVIDERS.spotify,
+      providerTrackId: track.id,
+      uri: track.uri,
+      isrc: track.external_ids?.isrc || '',
+      name: track.name,
+      artists: track.artists?.map(artist => artist?.name).filter(Boolean) || [],
+      album: {
+        providerAlbumId: track.album?.id,
+        name: track.album?.name,
+      },
+      releaseDate: track.album?.release_date,
+      durationMs: track.duration_ms,
+      popularity: track.popularity,
+      explicit: track.explicit,
+      rawSource: track,
+    });
+
+    return {
+      isAvailable: true,
+      isPlaying: Boolean(response.is_playing),
+      progressMs: response.progress_ms ?? 0,
+      durationMs: track.duration_ms ?? normalizedTrack.durationMs,
+      fetchedAt,
+      track: normalizedTrack,
+      albumCover: track.album?.images?.[0]?.url || '',
+      externalUrl: track.external_urls?.spotify || '',
+      currentlyPlayingType,
+    };
   },
 
   // Fetch all playlists (including the saved-tracks virtual playlist)

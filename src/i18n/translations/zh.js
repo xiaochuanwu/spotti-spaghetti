@@ -127,6 +127,25 @@ export const zh = {
   'insights.years': '年份',
   'batch.retryFailed': (n) => `重试失败项 (${n})`,
 
+  // Now Playing
+  'nowPlaying.title': '正在播放',
+  'nowPlaying.emptyTitle': '当前播放',
+  'nowPlaying.loading': '正在读取当前播放...',
+  'nowPlaying.error': '无法读取当前播放。',
+  'nowPlaying.noActivePlayback': '暂无正在播放的歌曲。',
+  'nowPlaying.unsupportedType': (type) => `当前播放内容不是歌曲: ${type}`,
+  'nowPlaying.unknownType': '未知类型',
+  'nowPlaying.playing': '播放中',
+  'nowPlaying.paused': '已暂停',
+  'nowPlaying.refresh': '刷新当前播放',
+  'nowPlaying.autoRefresh': '自动刷新',
+  'nowPlaying.progress': '播放进度',
+  'nowPlaying.explicit': 'Explicit 标识',
+  'nowPlaying.isrc': 'ISRC',
+  'nowPlaying.notAvailable': '暂无',
+  'nowPlaying.openSpotify': (name) => `在 Spotify 中打开 ${name}`,
+  'nowPlaying.coverAlt': (name) => `${name} 封面`,
+
   // Progress
   'progress.batchTitle': '正在批量导出歌单',
   'progress.singleTitle': '正在导出歌单歌曲',

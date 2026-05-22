@@ -17,6 +17,10 @@ export const PROVIDER_ERROR_CODES = {
   REQUEST_CANCELLED: 'PROVIDER_REQUEST_CANCELLED',
 };
 
+const CAPABILITY_METHODS = {
+  nowPlaying: 'getNowPlaying',
+};
+
 export const createProviderError = (code, details = {}) => (
   Object.assign(new Error(code), { code, details })
 );
@@ -25,9 +29,15 @@ export const assertMusicProvider = (provider) => {
   const missingMethods = REQUIRED_PROVIDER_METHODS.filter(method => (
     typeof provider?.[method] !== 'function'
   ));
+  const missingCapabilityMethods = Object.entries(provider?.capabilities || {})
+    .filter(([, enabled]) => enabled)
+    .map(([capability]) => CAPABILITY_METHODS[capability])
+    .filter(method => method && typeof provider?.[method] !== 'function');
 
-  if (!provider?.id || missingMethods.length > 0) {
-    throw new Error(`Invalid music provider: ${missingMethods.join(', ') || 'missing id'}`);
+  const allMissingMethods = [...missingMethods, ...missingCapabilityMethods];
+
+  if (!provider?.id || allMissingMethods.length > 0) {
+    throw new Error(`Invalid music provider: ${allMissingMethods.join(', ') || 'missing id'}`);
   }
 
   return provider;

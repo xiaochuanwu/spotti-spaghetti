@@ -190,3 +190,104 @@ test('apiCall retries 429 by Retry-After and then throws SPOTIFY_RATE_LIMIT_EXCE
   assert.equal(fetchCount, 5);
   assert.deepEqual(retrySeconds, [0, 0, 0, 0]);
 });
+
+test('getNowPlaying returns normalized track data for current Spotify track', async () => {
+  const now = 1_700_000_000_000;
+  Date.now = () => now;
+  setValidToken(now);
+
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, 'https://api.spotify.com/v1/me/player/currently-playing');
+    assert.equal(options.headers.Authorization, 'Bearer valid-token');
+    return jsonResponse({
+      is_playing: true,
+      progress_ms: 42_000,
+      currently_playing_type: 'track',
+      item: {
+        id: 'track-1',
+        uri: 'spotify:track:track-1',
+        name: 'Current Song',
+        duration_ms: 180_000,
+        popularity: 73,
+        explicit: true,
+        external_ids: { isrc: 'USRC17607839' },
+        external_urls: { spotify: 'https://open.spotify.com/track/track-1' },
+        artists: [{ id: 'artist-1', name: 'Artist One' }],
+        album: {
+          id: 'album-1',
+          name: 'Current Album',
+          release_date: '2026-05-22',
+          images: [{ url: 'https://example.test/cover-large.jpg' }],
+        },
+      },
+    });
+  };
+
+  const nowPlaying = await spotify.getNowPlaying();
+
+  assert.equal(nowPlaying.isAvailable, true);
+  assert.equal(nowPlaying.isPlaying, true);
+  assert.equal(nowPlaying.progressMs, 42_000);
+  assert.equal(nowPlaying.durationMs, 180_000);
+  assert.equal(nowPlaying.albumCover, 'https://example.test/cover-large.jpg');
+  assert.equal(nowPlaying.externalUrl, 'https://open.spotify.com/track/track-1');
+  assert.equal(nowPlaying.currentlyPlayingType, 'track');
+  assert.equal(nowPlaying.track.provider, 'spotify');
+  assert.equal(nowPlaying.track.providerTrackId, 'track-1');
+  assert.equal(nowPlaying.track.uri, 'spotify:track:track-1');
+  assert.equal(nowPlaying.track.name, 'Current Song');
+  assert.equal(nowPlaying.track.artistNames, 'Artist One');
+  assert.equal(nowPlaying.track.albumName, 'Current Album');
+  assert.equal(nowPlaying.track.durationMs, 180_000);
+  assert.equal(nowPlaying.track.explicit, true);
+  assert.equal(nowPlaying.track.isrc, 'USRC17607839');
+  assert.match(nowPlaying.fetchedAt, /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test('getNowPlaying returns unavailable when Spotify responds 204', async () => {
+  const now = 1_700_000_000_000;
+  Date.now = () => now;
+  setValidToken(now);
+  globalThis.fetch = async () => new Response(null, { status: 204 });
+
+  const nowPlaying = await spotify.getNowPlaying();
+
+  assert.equal(nowPlaying.isAvailable, false);
+  assert.equal(nowPlaying.reason, 'no_active_playback');
+  assert.match(nowPlaying.fetchedAt, /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test('getNowPlaying returns unavailable for non-track playback types', async () => {
+  const now = 1_700_000_000_000;
+  Date.now = () => now;
+  setValidToken(now);
+  globalThis.fetch = async () => jsonResponse({
+    is_playing: false,
+    progress_ms: 1_000,
+    currently_playing_type: 'episode',
+    item: { id: 'episode-1' },
+  });
+
+  const nowPlaying = await spotify.getNowPlaying();
+
+  assert.equal(nowPlaying.isAvailable, false);
+  assert.equal(nowPlaying.reason, 'unsupported_type');
+  assert.equal(nowPlaying.currentlyPlayingType, 'episode');
+  assert.equal(nowPlaying.isPlaying, false);
+  assert.equal(nowPlaying.progressMs, 1_000);
+});
+
+test('getNowPlaying clears auth and throws SPOTIFY_AUTH_EXPIRED on 401', async () => {
+  const now = 1_700_000_000_000;
+  Date.now = () => now;
+  setValidToken(now);
+  globalThis.fetch = async () => jsonResponse({ error: { status: 401 } }, { status: 401 });
+
+  await assert.rejects(
+    () => spotify.getNowPlaying(),
+    error => error.code === 'SPOTIFY_AUTH_EXPIRED'
+  );
+
+  assert.equal(storage.getItem(STORAGE_KEYS.accessToken), null);
+  assert.equal(storage.getItem(STORAGE_KEYS.accessTokenExpiresAt), null);
+});

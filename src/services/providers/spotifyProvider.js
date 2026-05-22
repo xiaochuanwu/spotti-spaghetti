@@ -31,6 +31,9 @@ export const getSpotifyErrorInfo = (error) => {
 export const spotifyProvider = assertMusicProvider({
   id: SPOTIFY_PROVIDER_ID,
   name: 'Spotify',
+  capabilities: {
+    nowPlaying: true,
+  },
   authorize: (...args) => spotify.authorize(...args),
   handleCallback: (...args) => spotify.handleCallback(...args),
   logout: (...args) => spotify.logout(...args),
@@ -42,5 +45,6 @@ export const spotifyProvider = assertMusicProvider({
   addTracksToPlaylist: (...args) => spotify.addTracksToPlaylist(...args),
   restorePlaylist: (...args) => spotify.restorePlaylist(...args),
   searchTracks: (...args) => spotify.searchTracks(...args),
+  getNowPlaying: (...args) => spotify.getNowPlaying(...args),
   getErrorInfo: getSpotifyErrorInfo,
 });
