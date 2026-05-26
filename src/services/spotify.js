@@ -98,6 +98,15 @@ const normalizeSpotifyDevice = (device = null) => {
   };
 };
 
+const getRequestAnchorIso = (startedAtMs, finishedAtMs = Date.now()) => {
+  const startedAt = Number(startedAtMs);
+  const finishedAt = Number(finishedAtMs);
+  const anchorMs = Number.isFinite(startedAt) && Number.isFinite(finishedAt)
+    ? Math.round((startedAt + finishedAt) / 2)
+    : Date.now();
+  return new Date(anchorMs).toISOString();
+};
+
 const normalizeSpotifyPlayback = (response, fetchedAt, unavailableReason = 'no_active_playback') => {
   const device = normalizeSpotifyDevice(response?.device);
   const baseState = {
@@ -492,6 +501,7 @@ export const spotify = {
   },
 
   async getNowPlaying(options = {}) {
+    const requestStartedAt = Date.now();
     const response = await this.apiCall(
       'https://api.spotify.com/v1/me/player/currently-playing',
       0,
@@ -499,12 +509,13 @@ export const spotify = {
       0,
       options
     );
-    const fetchedAt = new Date().toISOString();
+    const fetchedAt = getRequestAnchorIso(requestStartedAt);
 
     return normalizeSpotifyPlayback(response, fetchedAt);
   },
 
   async getPlaybackState(options = {}) {
+    const requestStartedAt = Date.now();
     const response = await this.apiCall(
       'https://api.spotify.com/v1/me/player',
       0,
@@ -512,7 +523,7 @@ export const spotify = {
       0,
       options
     );
-    const fetchedAt = new Date().toISOString();
+    const fetchedAt = getRequestAnchorIso(requestStartedAt);
 
     return normalizeSpotifyPlayback(response, fetchedAt, 'no_active_device');
   },

@@ -250,6 +250,33 @@ test('getNowPlaying returns normalized track data for current Spotify track', as
   assert.match(nowPlaying.fetchedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
+test('getNowPlaying anchors progress to the local request midpoint', async () => {
+  const now = 1_700_000_000_000;
+  const timestamps = [now, now + 800];
+  Date.now = () => timestamps.shift() ?? now + 800;
+  setValidToken(now);
+
+  globalThis.fetch = async () => jsonResponse({
+    is_playing: true,
+    progress_ms: 42_000,
+    timestamp: now - 10_000,
+    currently_playing_type: 'track',
+    item: {
+      id: 'track-1',
+      uri: 'spotify:track:track-1',
+      name: 'Current Song',
+      duration_ms: 180_000,
+      artists: [{ id: 'artist-1', name: 'Artist One' }],
+      album: { id: 'album-1', name: 'Current Album' },
+    },
+  });
+
+  const nowPlaying = await spotify.getNowPlaying();
+
+  assert.equal(nowPlaying.fetchedAt, new Date(now + 400).toISOString());
+  assert.equal(nowPlaying.timestamp, now - 10_000);
+});
+
 test('getNowPlaying returns unavailable when Spotify responds 204', async () => {
   const now = 1_700_000_000_000;
   Date.now = () => now;

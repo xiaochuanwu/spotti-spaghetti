@@ -1,20 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../i18n';
 import { calculateDisplayProgressMs } from '../services/nowPlayingProgress.js';
+import {
+  createOptimisticPlaybackState,
+  getSnapshotDurationMs,
+} from '../services/playbackState.js';
 
-const REFRESH_INTERVAL_MS = 15000;
-const PROGRESS_TICK_MS = 500;
+const REFRESH_INTERVAL_MS = 8000;
+const PROGRESS_TICK_MS = 250;
+const PLAYBACK_STATE_RECONCILE_DELAY_MS = 800;
 const TRACK_END_REFRESH_WINDOW_MS = 5000;
 const TRACK_END_REFRESH_THROTTLE_MS = 10000;
-
-const toDurationMs = (value) => {
-  const duration = Number(value);
-  return Number.isFinite(duration) && duration > 0 ? duration : 0;
-};
-
-const getSnapshotDurationMs = (snapshot) => (
-  toDurationMs(snapshot?.durationMs) || toDurationMs(snapshot?.track?.durationMs)
-);
 
 export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => {
   const { t } = useI18n();
@@ -27,6 +23,7 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
   const abortRef = useRef(null);
   const lastNowPlayingRef = useRef(null);
   const nearEndRefreshRef = useRef({ key: '', triggeredAt: 0 });
+  const reconcileTimeoutRef = useRef(null);
 
   const readPlaybackState = provider?.capabilities?.playbackState && provider?.getPlaybackState
     ? provider.getPlaybackState
@@ -76,14 +73,41 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
   const controlPlayback = useCallback(async (command, payload = {}) => {
     if (!canControlPlayback) return;
 
+    const commandStartedAt = Date.now();
+    const previousNowPlaying = lastNowPlayingRef.current;
+    const optimisticNowPlaying = createOptimisticPlaybackState(
+      previousNowPlaying,
+      command,
+      payload,
+      commandStartedAt
+    );
+
     setControlPending(command);
     setControlError('');
     setError('');
+    if (optimisticNowPlaying) {
+      lastNowPlayingRef.current = optimisticNowPlaying;
+      setNowPlaying(optimisticNowPlaying);
+      setDisplayNowMs(commandStartedAt);
+    }
 
     try {
       await provider.controlPlayback(command, payload);
-      await fetchNowPlaying({ silent: true });
+      if (optimisticNowPlaying) {
+        window.clearTimeout(reconcileTimeoutRef.current);
+        reconcileTimeoutRef.current = window.setTimeout(() => {
+          fetchNowPlaying({ silent: true });
+        }, PLAYBACK_STATE_RECONCILE_DELAY_MS);
+      } else {
+        await fetchNowPlaying({ silent: true });
+      }
     } catch (err) {
+      if (optimisticNowPlaying) {
+        lastNowPlayingRef.current = previousNowPlaying;
+        setNowPlaying(previousNowPlaying);
+        setDisplayNowMs(Date.now());
+      }
+
       const errorInfo = provider.getErrorInfo?.(err);
       if (errorInfo?.isCancelled) return;
 
@@ -110,6 +134,7 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
 
     return () => {
       window.clearTimeout(initialRefreshId);
+      window.clearTimeout(reconcileTimeoutRef.current);
       abortRef.current?.abort();
     };
   }, [fetchNowPlaying, isSupported]);
@@ -148,7 +173,12 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
     return () => {
       window.clearInterval(tickId);
     };
-  }, [nowPlaying?.fetchedAt, nowPlaying?.isAvailable, nowPlaying?.isPlaying, nowPlaying?.progressMs]);
+  }, [
+    nowPlaying?.fetchedAt,
+    nowPlaying?.isAvailable,
+    nowPlaying?.isPlaying,
+    nowPlaying?.progressMs,
+  ]);
 
   const durationMs = getSnapshotDurationMs(nowPlaying);
   const displayProgressMs = useMemo(() => (
@@ -158,7 +188,13 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
       isPlaying: nowPlaying?.isPlaying,
       fetchedAt: nowPlaying?.fetchedAt,
     }, displayNowMs)
-  ), [displayNowMs, durationMs, nowPlaying?.fetchedAt, nowPlaying?.isPlaying, nowPlaying?.progressMs]);
+  ), [
+    displayNowMs,
+    durationMs,
+    nowPlaying?.fetchedAt,
+    nowPlaying?.isPlaying,
+    nowPlaying?.progressMs,
+  ]);
 
   useEffect(() => {
     if (
@@ -216,3 +252,5 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
     nowPlaying,
   };
 };
+
+export const getNowPlayingRefreshIntervalMs = () => REFRESH_INTERVAL_MS;

@@ -56,6 +56,7 @@ export const en = {
   'workspace.restore': 'Restore',
   'workspace.history': 'History',
   'workspace.insights': 'Insights',
+  'workspace.lyrics': 'Lyrics',
   'workspace.playlists': 'Music library',
   'workspace.provider': 'Provider',
   'workspace.providerSpotify': 'Spotify',
@@ -64,6 +65,7 @@ export const en = {
   'workspace.restoreEyebrow': 'Playlist recovery',
   'workspace.historyEyebrow': 'Local snapshots',
   'workspace.insightsEyebrow': 'Taste analytics',
+  'workspace.lyricsEyebrow': 'Synced playback',
   'restore.csv': 'CSV file',
   'restore.chooseFile': 'Choose file',
   'restore.noFileSelected': 'No file selected',
@@ -173,6 +175,17 @@ export const en = {
   'nowPlaying.notAvailable': 'N/A',
   'nowPlaying.openSpotify': (name) => `Open ${name} on Spotify`,
   'nowPlaying.coverAlt': (name) => `${name} cover`,
+
+  // Lyrics
+  'lyrics.title': 'Lyrics',
+  'lyrics.loading': 'Loading lyrics...',
+  'lyrics.loadingPlayback': 'Loading current playback...',
+  'lyrics.empty': 'You may have to guess the lyrics for this one 🤔',
+  'lyrics.error': 'Unable to load lyrics.',
+  'lyrics.noActiveTrack': 'Play a track on Spotify to view synced lyrics.',
+  'lyrics.providerSource': (source) => `Lyrics source: ${source}`,
+  'lyrics.sourceNetease': 'NetEase',
+  'lyrics.seekTo': (time) => `Seek playback to ${time}`,
 
   // Progress
   'progress.batchTitle': 'Batch exporting playlists',

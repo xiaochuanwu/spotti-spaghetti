@@ -598,6 +598,7 @@ export default function App() {
                     history={historySnapshots}
                     latestDiff={latestDiff}
                     formatError={getErrorText}
+                    onAuthExpired={handleNowPlayingAuthExpired}
                     onClearHistory={clearHistory}
                     onDeleteHistory={deleteHistorySnapshot}
                     onExportHistory={exportLocalHistory}
@@ -605,6 +606,7 @@ export default function App() {
                     onRestorePlaylist={handleRestorePlaylist}
                     onRestoreSnapshot={handleRestoreSnapshot}
                     onToolChange={setActiveTool}
+                    provider={currentProvider}
                     onPreview={(playlist) => {
                       setPreviewPlaylist(playlist);
                       setIsPreviewOpen(true);

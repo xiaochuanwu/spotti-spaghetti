@@ -1,4 +1,4 @@
-import { BarChart3, Clock3, Library, Radio, RotateCcw, Upload } from 'lucide-react';
+import { BarChart3, Clock3, Library, ListMusic, Radio, RotateCcw, Upload } from 'lucide-react';
 import { useI18n } from '../../i18n';
 
 const navItems = [
@@ -6,6 +6,7 @@ const navItems = [
   { id: 'restore', icon: Upload, labelKey: 'workspace.restore' },
   { id: 'history', icon: Clock3, labelKey: 'workspace.history' },
   { id: 'insights', icon: BarChart3, labelKey: 'workspace.insights' },
+  { id: 'lyrics', icon: ListMusic, labelKey: 'workspace.lyrics' },
 ];
 
 const NavButton = ({ active, icon: Icon, label, onClick }) => (

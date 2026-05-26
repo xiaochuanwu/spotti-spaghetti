@@ -314,9 +314,11 @@ const PlaybackControlButton = ({
   label,
   onClick,
   pending,
+  showPending = true,
   size = 'md',
 }) => {
   const isLarge = size === 'lg';
+  const isInteractionDisabled = Boolean(disabled || pending);
   const sizeClass = isLarge ? 'h-12 w-12 rounded-full' : 'h-10 w-10 rounded-full';
   const toneClass = isLarge
     ? 'bg-[#1d1d1f] text-white shadow-[0_4px_14px_rgba(0,0,0,0.16)] hover:bg-[#2c2c2e] active:scale-[0.96] dark:bg-[#f5f5f7] dark:text-[#1d1d1f] dark:shadow-[0_4px_16px_rgba(0,0,0,0.32)] dark:hover:bg-white'
@@ -328,14 +330,23 @@ const PlaybackControlButton = ({
     <span className="relative inline-flex flex-col items-center">
       <button
         type="button"
-        onClick={onClick}
-        disabled={disabled || pending}
+        onClick={(event) => {
+          if (isInteractionDisabled) {
+            event.preventDefault();
+            return;
+          }
+          onClick?.(event);
+        }}
+        disabled={disabled}
+        aria-disabled={isInteractionDisabled}
         aria-label={label}
         aria-pressed={!isLarge && active ? true : undefined}
         title={label}
         className={`inline-flex shrink-0 items-center justify-center ${sizeClass} ${toneClass} outline-none transition-[background-color,color,transform,box-shadow] duration-200 focus-visible:ring-2 focus-visible:ring-[#0071e3]/40 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-[#c7c7cc] disabled:shadow-none disabled:hover:bg-transparent dark:disabled:text-[#545458]`}
       >
-        {pending ? <Loader2 size={size === 'lg' ? 18 : 15} className="animate-spin" aria-hidden="true" /> : children}
+        {pending && showPending ? (
+          <Loader2 size={size === 'lg' ? 18 : 15} className="animate-spin" aria-hidden="true" />
+        ) : children}
       </button>
       {!isLarge && active && (
         <span className="absolute -bottom-1 h-1 w-1 rounded-full bg-[#0071e3] dark:bg-[#8fc7ff]" aria-hidden="true" />
@@ -362,6 +373,7 @@ const PlaybackControls = ({
   const repeatState = nowPlaying?.repeatState || 'off';
   const basePayload = deviceId ? { deviceId } : {};
   const repeatLabel = getRepeatLabel(repeatState, t);
+  const isPlayPausePending = controlPending === 'play' || controlPending === 'pause';
 
   return (
     <div className="mt-5 flex flex-col items-center gap-2">
@@ -387,7 +399,8 @@ const PlaybackControls = ({
           disabled={isDisabled}
           label={isPlaying ? t('nowPlaying.pause') : t('nowPlaying.play')}
           onClick={() => controlPlayback(isPlaying ? 'pause' : 'play', basePayload)}
-          pending={controlPending === 'play' || controlPending === 'pause'}
+          pending={isPlayPausePending}
+          showPending={false}
           size="lg"
         >
           {isPlaying ? (

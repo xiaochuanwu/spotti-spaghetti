@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { BarChart3, Clock3, Library, Upload } from 'lucide-react';
+import { BarChart3, Clock3, Library, ListMusic, Upload } from 'lucide-react';
 import { useI18n } from '../../i18n';
 import { PlaylistLibrary } from './PlaylistLibrary.jsx';
 import { HistoryPanel } from '../workspace/HistoryPanel.jsx';
 import { InsightsPanel } from '../workspace/InsightsPanel.jsx';
+import { LyricsPanel } from '../workspace/LyricsPanel.jsx';
 import { RestorePanel } from '../workspace/RestorePanel.jsx';
 
 const pageMeta = {
@@ -11,6 +12,7 @@ const pageMeta = {
   restore: { icon: Upload, titleKey: 'workspace.restore', eyebrowKey: 'workspace.restoreEyebrow' },
   history: { icon: Clock3, titleKey: 'workspace.history', eyebrowKey: 'workspace.historyEyebrow' },
   insights: { icon: BarChart3, titleKey: 'workspace.insights', eyebrowKey: 'workspace.insightsEyebrow' },
+  lyrics: { icon: ListMusic, titleKey: 'workspace.lyrics', eyebrowKey: 'workspace.lyricsEyebrow' },
 };
 
 const PageHeader = ({ activeTool }) => {
@@ -41,6 +43,7 @@ export const WorkspaceView = ({
   formatError,
   history,
   latestDiff,
+  onAuthExpired,
   onClearHistory,
   onDeleteHistory,
   onExportAll,
@@ -56,6 +59,7 @@ export const WorkspaceView = ({
   onViewModeChange,
   playlistCount,
   playlists,
+  provider,
   searchQuery,
   selectedPlaylistIds,
   viewMode,
@@ -113,6 +117,14 @@ export const WorkspaceView = ({
           history={history}
           selectedHistoryId={selectedHistoryId}
           onSelectHistory={setSelectedHistoryId}
+        />
+      )}
+
+      {currentTool === 'lyrics' && (
+        <LyricsPanel
+          formatError={formatError}
+          onAuthExpired={onAuthExpired}
+          provider={provider}
         />
       )}
     </section>

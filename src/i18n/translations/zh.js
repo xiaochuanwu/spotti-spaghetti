@@ -56,6 +56,7 @@ export const zh = {
   'workspace.restore': '恢复歌单',
   'workspace.history': '导出历史',
   'workspace.insights': '品味分析',
+  'workspace.lyrics': '歌词',
   'workspace.playlists': '歌曲库',
   'workspace.provider': '音乐服务',
   'workspace.providerSpotify': 'Spotify',
@@ -64,6 +65,7 @@ export const zh = {
   'workspace.restoreEyebrow': '歌单恢复',
   'workspace.historyEyebrow': '本地快照',
   'workspace.insightsEyebrow': '品味分析',
+  'workspace.lyricsEyebrow': '同步播放',
   'restore.csv': 'CSV 文件',
   'restore.chooseFile': '选择文件',
   'restore.noFileSelected': '未选择任何文件',
@@ -173,6 +175,17 @@ export const zh = {
   'nowPlaying.notAvailable': '暂无',
   'nowPlaying.openSpotify': (name) => `在 Spotify 中打开 ${name}`,
   'nowPlaying.coverAlt': (name) => `${name} 封面`,
+
+  // Lyrics
+  'lyrics.title': '歌词',
+  'lyrics.loading': '正在加载歌词...',
+  'lyrics.loadingPlayback': '正在读取当前播放...',
+  'lyrics.empty': '这首歌你可能要猜猜歌词了 🤔',
+  'lyrics.error': '无法加载歌词。',
+  'lyrics.noActiveTrack': '在 Spotify 播放歌曲后即可查看同步歌词。',
+  'lyrics.providerSource': (source) => `歌词来源: ${source}`,
+  'lyrics.sourceNetease': '网易云',
+  'lyrics.seekTo': (time) => `跳转播放到 ${time}`,
 
   // Progress
   'progress.batchTitle': '正在批量导出歌单',
