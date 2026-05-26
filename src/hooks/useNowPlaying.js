@@ -20,8 +20,9 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
   const { t } = useI18n();
   const [nowPlaying, setNowPlaying] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [controlPending, setControlPending] = useState('');
+  const [controlError, setControlError] = useState('');
   const [error, setError] = useState('');
-  const [autoRefresh, setAutoRefresh] = useState(true);
   const [displayNowMs, setDisplayNowMs] = useState(() => Date.now());
   const abortRef = useRef(null);
   const lastNowPlayingRef = useRef(null);
@@ -30,6 +31,7 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
   const readPlaybackState = provider?.capabilities?.playbackState && provider?.getPlaybackState
     ? provider.getPlaybackState
     : provider?.getNowPlaying;
+  const canControlPlayback = Boolean(provider?.capabilities?.playbackControl && provider?.controlPlayback);
   const isSupported = Boolean(readPlaybackState);
 
   const fetchNowPlaying = useCallback(async ({ silent = false } = {}) => {
@@ -49,6 +51,7 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
       lastNowPlayingRef.current = result;
       setNowPlaying(result);
       setDisplayNowMs(Date.now());
+      setControlError('');
       setError('');
     } catch (err) {
       const errorInfo = provider.getErrorInfo?.(err);
@@ -70,6 +73,34 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
     }
   }, [formatError, isSupported, onAuthExpired, provider, readPlaybackState, t]);
 
+  const controlPlayback = useCallback(async (command, payload = {}) => {
+    if (!canControlPlayback) return;
+
+    setControlPending(command);
+    setControlError('');
+    setError('');
+
+    try {
+      await provider.controlPlayback(command, payload);
+      await fetchNowPlaying({ silent: true });
+    } catch (err) {
+      const errorInfo = provider.getErrorInfo?.(err);
+      if (errorInfo?.isCancelled) return;
+
+      if (errorInfo?.isAuthExpired) {
+        onAuthExpired?.(err);
+      }
+
+      console.error('Failed to control playback:', err);
+      const errorMessage = errorInfo?.translationKey && errorInfo.translationKey !== 'error.genericDetail'
+        ? formatError?.(err)
+        : t('nowPlaying.controlError');
+      setControlError(errorMessage || t('nowPlaying.controlError'));
+    } finally {
+      setControlPending('');
+    }
+  }, [canControlPlayback, fetchNowPlaying, formatError, onAuthExpired, provider, t]);
+
   useEffect(() => {
     if (!isSupported) return undefined;
 
@@ -84,7 +115,7 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
   }, [fetchNowPlaying, isSupported]);
 
   useEffect(() => {
-    if (!isSupported || !autoRefresh) return undefined;
+    if (!isSupported) return undefined;
 
     const refreshIfVisible = () => {
       if (document.visibilityState === 'visible') {
@@ -105,7 +136,7 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [autoRefresh, fetchNowPlaying, isSupported]);
+  }, [fetchNowPlaying, isSupported]);
 
   useEffect(() => {
     if (!nowPlaying?.isAvailable || !nowPlaying?.isPlaying) return undefined;
@@ -132,7 +163,6 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
   useEffect(() => {
     if (
       !isSupported ||
-      !autoRefresh ||
       !nowPlaying?.isAvailable ||
       !nowPlaying?.isPlaying ||
       durationMs <= 0
@@ -160,7 +190,6 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
     nearEndRefreshRef.current = { key: refreshKey, triggeredAt: nowMs };
     fetchNowPlaying({ silent: true });
   }, [
-    autoRefresh,
     displayProgressMs,
     durationMs,
     fetchNowPlaying,
@@ -174,7 +203,10 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
   ]);
 
   return {
-    autoRefresh,
+    canControlPlayback,
+    controlError,
+    controlPending,
+    controlPlayback,
     displayProgressMs,
     durationMs,
     error,
@@ -182,6 +214,5 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
     isLoading,
     isSupported,
     nowPlaying,
-    setAutoRefresh,
   };
 };

@@ -52,6 +52,19 @@ test('assertMusicProvider requires getPlaybackState when playbackState capabilit
   assert.equal(assertMusicProvider(provider), provider);
 });
 
+test('assertMusicProvider requires controlPlayback when playbackControl capability is enabled', () => {
+  assert.throws(
+    () => assertMusicProvider(createProvider({ capabilities: { playbackControl: true } })),
+    /Invalid music provider: controlPlayback/
+  );
+
+  const provider = createProvider({
+    capabilities: { playbackControl: true },
+    controlPlayback: () => null,
+  });
+  assert.equal(assertMusicProvider(provider), provider);
+});
+
 test('provider registry returns the registered Spotify provider', async () => {
   globalThis.sessionStorage = globalThis.sessionStorage || {
     getItem: () => null,
@@ -76,7 +89,9 @@ test('provider registry returns the registered Spotify provider', async () => {
   assert.equal(provider.id, 'spotify');
   assert.equal(typeof provider.getErrorInfo, 'function');
   assert.equal(provider.capabilities.nowPlaying, true);
+  assert.equal(provider.capabilities.playbackControl, true);
   assert.equal(provider.capabilities.playbackState, true);
+  assert.equal(typeof provider.controlPlayback, 'function');
   assert.equal(typeof provider.getNowPlaying, 'function');
   assert.equal(typeof provider.getPlaybackState, 'function');
   assert.equal(provider, getMusicProvider('spotify'));

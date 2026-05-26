@@ -148,10 +148,10 @@ test('isLoggedIn migrates legacy access token timestamp to expiresAt', () => {
   assert.equal(storage.getItem(STORAGE_KEYS.accessTokenTimestamp), null);
 });
 
-test('Spotify scopes include read-only playback state access', () => {
+test('Spotify scopes include playback state and control access', () => {
   assert.match(SPOTIFY_CONFIG.scopes, /user-read-currently-playing/);
   assert.match(SPOTIFY_CONFIG.scopes, /user-read-playback-state/);
-  assert.doesNotMatch(SPOTIFY_CONFIG.scopes, /user-modify-playback-state/);
+  assert.match(SPOTIFY_CONFIG.scopes, /user-modify-playback-state/);
 });
 
 test('apiCall clears auth and throws SPOTIFY_AUTH_EXPIRED on 401', async () => {
@@ -430,4 +430,80 @@ test('getPlaybackState surfaces missing playback scope as permission denied', as
   );
 
   assert.equal(storage.getItem(STORAGE_KEYS.accessToken), 'valid-token');
+});
+
+test('controlPlayback sends play and pause commands to the active device', async () => {
+  const now = 1_700_000_000_000;
+  Date.now = () => now;
+  setValidToken(now);
+  const calls = [];
+
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, method: options.method });
+    return new Response(null, { status: 204 });
+  };
+
+  await spotify.controlPlayback('play', { deviceId: 'device-1' });
+  await spotify.controlPlayback('pause', { deviceId: 'device-1' });
+
+  assert.deepEqual(calls, [
+    {
+      method: 'PUT',
+      url: 'https://api.spotify.com/v1/me/player/play?device_id=device-1',
+    },
+    {
+      method: 'PUT',
+      url: 'https://api.spotify.com/v1/me/player/pause?device_id=device-1',
+    },
+  ]);
+});
+
+test('controlPlayback accepts empty successful responses beyond 204', async () => {
+  const now = 1_700_000_000_000;
+  Date.now = () => now;
+  setValidToken(now);
+  globalThis.fetch = async () => new Response(null, { status: 202 });
+
+  assert.equal(await spotify.controlPlayback('pause'), null);
+});
+
+test('controlPlayback sends next, previous, shuffle, repeat, and seek commands', async () => {
+  const now = 1_700_000_000_000;
+  Date.now = () => now;
+  setValidToken(now);
+  const calls = [];
+
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, method: options.method });
+    return new Response(null, { status: 204 });
+  };
+
+  await spotify.controlPlayback('next');
+  await spotify.controlPlayback('previous');
+  await spotify.controlPlayback('shuffle', { state: true, deviceId: 'device-1' });
+  await spotify.controlPlayback('repeat', { state: 'track', deviceId: 'device-1' });
+  await spotify.controlPlayback('seek', { positionMs: 42_500, deviceId: 'device-1' });
+
+  assert.deepEqual(calls, [
+    {
+      method: 'POST',
+      url: 'https://api.spotify.com/v1/me/player/next',
+    },
+    {
+      method: 'POST',
+      url: 'https://api.spotify.com/v1/me/player/previous',
+    },
+    {
+      method: 'PUT',
+      url: 'https://api.spotify.com/v1/me/player/shuffle?state=true&device_id=device-1',
+    },
+    {
+      method: 'PUT',
+      url: 'https://api.spotify.com/v1/me/player/repeat?state=track&device_id=device-1',
+    },
+    {
+      method: 'PUT',
+      url: 'https://api.spotify.com/v1/me/player/seek?position_ms=42500&device_id=device-1',
+    },
+  ]);
 });

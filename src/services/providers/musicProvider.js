@@ -19,6 +19,7 @@ export const PROVIDER_ERROR_CODES = {
 
 const CAPABILITY_METHODS = {
   nowPlaying: 'getNowPlaying',
+  playbackControl: 'controlPlayback',
   playbackState: 'getPlaybackState',
 };
 

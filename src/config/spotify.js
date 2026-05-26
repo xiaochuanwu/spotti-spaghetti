@@ -3,7 +3,7 @@ const env = import.meta.env || {};
 export const SPOTIFY_CONFIG = {
   clientId: env.VITE_SPOTIFY_CLIENT_ID || '',
   redirectUri: `${window.location.origin}/`,
-  scopes: 'playlist-read-private playlist-read-collaborative user-library-read user-read-currently-playing user-read-playback-state playlist-modify-private playlist-modify-public',
+  scopes: 'playlist-read-private playlist-read-collaborative user-library-read user-read-currently-playing user-read-playback-state user-modify-playback-state playlist-modify-private playlist-modify-public',
   tokenExpiry: 3600000,
 };
 
