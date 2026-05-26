@@ -55,7 +55,7 @@ globalThis.window = {
 
 const { STORAGE_KEYS } = await import('../src/config/storage.js');
 const { SPOTIFY_CONFIG } = await import('../src/config/spotify.js');
-const { spotify, resetStableClockDriftForTesting } = await import('../src/services/spotify.js');
+const { spotify, resetStableClockDriftForTesting, setStableClockDriftForTesting } = await import('../src/services/spotify.js');
 
 SPOTIFY_CONFIG.clientId = 'test-client-id';
 
@@ -84,6 +84,7 @@ test.beforeEach(() => {
   globalThis.fetch = originalFetch;
   console.error = () => {};
   console.warn = () => {};
+  resetStableClockDriftForTesting();
 });
 
 test.after(() => {
@@ -250,7 +251,10 @@ test('getNowPlaying returns normalized track data for current Spotify track', as
   assert.match(nowPlaying.fetchedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
-test('getNowPlaying anchors progress to the local request midpoint', async () => {
+test('getNowPlaying anchors progress to the state update timestamp when clock drift is zero', async () => {
+  resetStableClockDriftForTesting();
+  setStableClockDriftForTesting(0);
+
   const now = 1_700_000_000_000;
   const timestamps = [now, now + 800];
   Date.now = () => timestamps.shift() ?? now + 800;
@@ -273,22 +277,24 @@ test('getNowPlaying anchors progress to the local request midpoint', async () =>
 
   const nowPlaying = await spotify.getNowPlaying();
 
-  assert.equal(nowPlaying.fetchedAt, new Date(now + 400).toISOString());
+  assert.equal(nowPlaying.fetchedAt, new Date(now - 10_000).toISOString());
   assert.equal(nowPlaying.timestamp, now - 10_000);
+
+  resetStableClockDriftForTesting();
 });
 
-test('getNowPlaying adjusts fetchedAt for clock drift using response Date header', async () => {
+test('getNowPlaying adjusts fetchedAt for clock drift using setStableClockDriftForTesting', async () => {
   resetStableClockDriftForTesting();
+  setStableClockDriftForTesting(5400);
 
   const now = 1_700_000_000_000;
   const timestamps = [now, now + 800];
   Date.now = () => timestamps.shift() ?? now + 800;
   setValidToken(now);
 
-  const serverDateStr = 'Tue, 14 Nov 2023 22:13:15 GMT';
   const playbackTimestamp = 1699999985000;
 
-  globalThis.fetch = async () => new Response(JSON.stringify({
+  globalThis.fetch = async () => jsonResponse({
     is_playing: true,
     progress_ms: 42_000,
     timestamp: playbackTimestamp,
@@ -301,20 +307,10 @@ test('getNowPlaying adjusts fetchedAt for clock drift using response Date header
       artists: [{ id: 'artist-1', name: 'Artist One' }],
       album: { id: 'album-1', name: 'Current Album' },
     },
-  }), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json',
-      'Date': serverDateStr,
-    },
   });
 
   const nowPlaying = await spotify.getNowPlaying();
 
-  // clientMidpoint = now + 400 = 1700000000400
-  // serverDateMs = Date.parse(serverDateStr) = 1699999995000
-  // drift = clientMidpoint - serverDateMs = 5400 ms
-  // expectedFetchedAt = timestamp + drift = 1699999985000 + 5400 = 1699999990400
   const expectedFetchedAtIso = new Date(playbackTimestamp + 5400).toISOString();
   assert.equal(nowPlaying.fetchedAt, expectedFetchedAtIso);
   assert.equal(nowPlaying.timestamp, playbackTimestamp);

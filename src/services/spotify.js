@@ -108,35 +108,49 @@ const getRequestAnchorIso = (startedAtMs, finishedAtMs = Date.now()) => {
 };
 
 let stableClockDrift = null;
+let driftMeasurementPromise = null;
 
-const getClockDrift = (fetchedAtMs, serverDateMs) => {
-  const currentDrift = fetchedAtMs - serverDateMs;
-  if (stableClockDrift === null) {
-    stableClockDrift = currentDrift;
-  } else {
-    if (Math.abs(currentDrift - stableClockDrift) > 5000) {
-      stableClockDrift = currentDrift;
+const ensureClockDriftMeasured = () => {
+  if (driftMeasurementPromise) return driftMeasurementPromise;
+
+  driftMeasurementPromise = (async () => {
+    try {
+      const startedAt = Date.now();
+      const res = await fetch(window.location.origin, { method: 'HEAD' });
+      const finishedAt = Date.now();
+      const serverDate = res.headers.get('Date');
+      if (serverDate) {
+        const clientMidpoint = (startedAt + finishedAt) / 2;
+        stableClockDrift = clientMidpoint - Date.parse(serverDate);
+        return;
+      }
+    } catch (e) {
+      console.warn('Failed to estimate clock drift from origin:', e);
     }
-  }
-  return stableClockDrift;
+    stableClockDrift = 0;
+  })();
+
+  return driftMeasurementPromise;
+};
+
+// Set clock drift helper for testing
+export const setStableClockDriftForTesting = (drift) => {
+  stableClockDrift = drift;
+  driftMeasurementPromise = Promise.resolve();
 };
 
 // Reset clock drift helper for testing
 export const resetStableClockDriftForTesting = () => {
   stableClockDrift = null;
+  driftMeasurementPromise = null;
 };
 
-const normalizeSpotifyPlayback = (response, fetchedAt, unavailableReason = 'no_active_playback', serverDate = null) => {
+const normalizeSpotifyPlayback = (response, fetchedAt, unavailableReason = 'no_active_playback') => {
   const device = normalizeSpotifyDevice(response?.device);
 
   let calculatedFetchedAt = fetchedAt;
-  if (response?.timestamp && serverDate) {
-    const fetchedAtMs = Date.parse(fetchedAt);
-    const serverDateMs = Date.parse(serverDate);
-    if (Number.isFinite(fetchedAtMs) && Number.isFinite(serverDateMs)) {
-      const drift = getClockDrift(fetchedAtMs, serverDateMs);
-      calculatedFetchedAt = new Date(response.timestamp + drift).toISOString();
-    }
+  if (response?.timestamp && stableClockDrift !== null) {
+    calculatedFetchedAt = new Date(response.timestamp + stableClockDrift).toISOString();
   }
 
   const baseState = {
@@ -434,9 +448,6 @@ export const spotify = {
       });
 
       if (response.ok) {
-        if (typeof options.onResponseHeaders === 'function') {
-          options.onResponseHeaders(response.headers);
-        }
         return readSuccessfulResponseBody(response);
       }
 
@@ -534,43 +545,33 @@ export const spotify = {
   },
 
   async getNowPlaying(options = {}) {
+    await ensureClockDriftMeasured();
     const requestStartedAt = Date.now();
-    let serverDate = null;
     const response = await this.apiCall(
       'https://api.spotify.com/v1/me/player/currently-playing',
       0,
       null,
       0,
-      {
-        ...options,
-        onResponseHeaders: (headers) => {
-          serverDate = headers.get('Date');
-        },
-      }
+      options
     );
     const fetchedAt = getRequestAnchorIso(requestStartedAt);
 
-    return normalizeSpotifyPlayback(response, fetchedAt, 'no_active_playback', serverDate);
+    return normalizeSpotifyPlayback(response, fetchedAt, 'no_active_playback');
   },
 
   async getPlaybackState(options = {}) {
+    await ensureClockDriftMeasured();
     const requestStartedAt = Date.now();
-    let serverDate = null;
     const response = await this.apiCall(
       'https://api.spotify.com/v1/me/player',
       0,
       null,
       0,
-      {
-        ...options,
-        onResponseHeaders: (headers) => {
-          serverDate = headers.get('Date');
-        },
-      }
+      options
     );
     const fetchedAt = getRequestAnchorIso(requestStartedAt);
 
-    return normalizeSpotifyPlayback(response, fetchedAt, 'no_active_device', serverDate);
+    return normalizeSpotifyPlayback(response, fetchedAt, 'no_active_device');
   },
 
   async controlPlayback(command, payload = {}, options = {}) {
