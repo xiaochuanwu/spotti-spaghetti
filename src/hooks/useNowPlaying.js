@@ -3,7 +3,7 @@ import { useI18n } from '../i18n';
 import { calculateDisplayProgressMs } from '../services/nowPlayingProgress.js';
 
 const REFRESH_INTERVAL_MS = 15000;
-const PROGRESS_TICK_MS = 1000;
+const PROGRESS_TICK_MS = 500;
 const TRACK_END_REFRESH_WINDOW_MS = 5000;
 const TRACK_END_REFRESH_THROTTLE_MS = 10000;
 

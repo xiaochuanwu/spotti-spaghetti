@@ -334,7 +334,6 @@ export const spotify = {
   },
 
   async getNowPlaying(options = {}) {
-    const fetchedAt = new Date().toISOString();
     const response = await this.apiCall(
       'https://api.spotify.com/v1/me/player/currently-playing',
       0,
@@ -342,6 +341,7 @@ export const spotify = {
       0,
       options
     );
+    const fetchedAt = new Date().toISOString();
 
     if (!response?.item) {
       return {
