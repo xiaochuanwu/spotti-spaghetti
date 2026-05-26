@@ -27,7 +27,10 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
   const lastNowPlayingRef = useRef(null);
   const nearEndRefreshRef = useRef({ key: '', triggeredAt: 0 });
 
-  const isSupported = Boolean(provider?.capabilities?.nowPlaying && provider?.getNowPlaying);
+  const readPlaybackState = provider?.capabilities?.playbackState && provider?.getPlaybackState
+    ? provider.getPlaybackState
+    : provider?.getNowPlaying;
+  const isSupported = Boolean(readPlaybackState);
 
   const fetchNowPlaying = useCallback(async ({ silent = false } = {}) => {
     if (!isSupported) return;
@@ -42,7 +45,7 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
     }
 
     try {
-      const result = await provider.getNowPlaying({ signal: abortController.signal });
+      const result = await readPlaybackState({ signal: abortController.signal });
       lastNowPlayingRef.current = result;
       setNowPlaying(result);
       setDisplayNowMs(Date.now());
@@ -65,7 +68,7 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
         setIsLoading(false);
       }
     }
-  }, [formatError, isSupported, onAuthExpired, provider, t]);
+  }, [formatError, isSupported, onAuthExpired, provider, readPlaybackState, t]);
 
   useEffect(() => {
     if (!isSupported) return undefined;

@@ -14,6 +14,18 @@ const progressPercentFor = (progressMs, durationMs) => {
   return Math.min(100, (progressMs / durationMs) * 100);
 };
 
+const formatDeviceLabel = (device, t) => {
+  if (!device) return t('nowPlaying.noActiveDevice');
+  const name = device.name || t('nowPlaying.unknownDevice');
+  return device.type ? `${name} - ${device.type}` : name;
+};
+
+const formatRepeatState = (state, t) => {
+  if (state === 'track') return t('nowPlaying.repeatTrack');
+  if (state === 'context') return t('nowPlaying.repeatContext');
+  return t('nowPlaying.repeatOff');
+};
+
 const NowPlayingActions = ({
   autoRefresh,
   isLoading,
@@ -214,6 +226,42 @@ const ProgressMeter = ({ durationMs, progressMs, t, variant }) => {
   );
 };
 
+const PlaybackStateBadges = ({ nowPlaying, t, variant }) => {
+  const badgeClass = variant === 'compact'
+    ? 'rounded-lg bg-[#f5f5f7] px-2 py-1 text-[10px] font-semibold text-[#86868b] dark:bg-[#2d2d30]'
+    : 'rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[11px] font-semibold text-[#86868b] dark:bg-[#2d2d30]';
+  const wrapperClass = variant === 'player'
+    ? 'mt-4 flex flex-wrap justify-center gap-2'
+    : 'mt-3 flex flex-wrap items-center gap-2';
+  const device = nowPlaying?.device || null;
+  const shuffleState = nowPlaying?.shuffleState;
+  const repeatState = nowPlaying?.repeatState;
+
+  return (
+    <div className={wrapperClass}>
+      <span className={badgeClass}>
+        {t('nowPlaying.activeDevice')}: {formatDeviceLabel(device, t)}
+      </span>
+      {device?.isPrivateSession && (
+        <span className={badgeClass}>{t('nowPlaying.privateSession')}</span>
+      )}
+      {device?.isRestricted && (
+        <span className={badgeClass}>{t('nowPlaying.restrictedDevice')}</span>
+      )}
+      {typeof shuffleState === 'boolean' && (
+        <span className={badgeClass}>
+          {shuffleState ? t('nowPlaying.shuffleOn') : t('nowPlaying.shuffleOff')}
+        </span>
+      )}
+      {repeatState && (
+        <span className={badgeClass}>
+          {t('nowPlaying.repeat')}: {formatRepeatState(repeatState, t)}
+        </span>
+      )}
+    </div>
+  );
+};
+
 const SpotifyLink = ({ href, t, trackName, variant }) => {
   if (!href) return null;
 
@@ -315,6 +363,7 @@ const DefaultContent = ({ durationMs, nowPlaying, progressMs, t, track }) => (
       </div>
 
       <ProgressMeter durationMs={durationMs} progressMs={progressMs} t={t} variant="default" />
+      <PlaybackStateBadges nowPlaying={nowPlaying} t={t} variant="default" />
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-[#86868b]">
         <span className="rounded-full bg-[#f5f5f7] px-2 py-1 dark:bg-[#2d2d30]">
@@ -339,6 +388,7 @@ const CompactContent = ({ durationMs, nowPlaying, progressMs, t, track }) => (
     </div>
 
     <ProgressMeter durationMs={durationMs} progressMs={progressMs} t={t} variant="compact" />
+    <PlaybackStateBadges nowPlaying={nowPlaying} t={t} variant="compact" />
   </div>
 );
 
@@ -353,6 +403,7 @@ const PlayerContent = ({ durationMs, nowPlaying, progressMs, t, track }) => (
     <TrackInfo nowPlaying={nowPlaying} t={t} track={track} variant="player" />
 
     <ProgressMeter durationMs={durationMs} progressMs={progressMs} t={t} variant="player" />
+    <PlaybackStateBadges nowPlaying={nowPlaying} t={t} variant="player" />
 
     <div className="mt-4 flex items-center justify-between gap-2">
       <span className="min-w-0 truncate rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[11px] font-semibold text-[#86868b] dark:bg-[#2d2d30]">
@@ -383,6 +434,8 @@ export const NowPlayingPanel = ({ provider, formatError, variant = 'default', on
   const isTrackAvailable = Boolean(nowPlaying?.isAvailable && track);
   const unavailableMessage = nowPlaying?.reason === 'unsupported_type'
     ? t('nowPlaying.unsupportedType', nowPlaying.currentlyPlayingType || t('nowPlaying.unknownType'))
+    : nowPlaying?.reason === 'no_active_device'
+      ? t('nowPlaying.noActiveDevice')
     : t('nowPlaying.noActivePlayback');
   const isPlayer = variant === 'player';
   const isCompact = variant === 'compact';

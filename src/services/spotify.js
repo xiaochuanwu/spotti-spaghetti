@@ -67,6 +67,88 @@ const throwIfAborted = (signal) => {
   }
 };
 
+const normalizeSpotifyDevice = (device = null) => {
+  if (!device) return null;
+
+  return {
+    id: device.id || '',
+    isActive: Boolean(device.is_active),
+    isPrivateSession: Boolean(device.is_private_session),
+    isRestricted: Boolean(device.is_restricted),
+    name: device.name || '',
+    supportsVolume: Boolean(device.supports_volume),
+    type: device.type || '',
+    volumePercent: Number.isFinite(Number(device.volume_percent))
+      ? Number(device.volume_percent)
+      : null,
+  };
+};
+
+const normalizeSpotifyPlayback = (response, fetchedAt, unavailableReason = 'no_active_playback') => {
+  const device = normalizeSpotifyDevice(response?.device);
+  const baseState = {
+    context: response?.context ? {
+      externalUrl: response.context.external_urls?.spotify || '',
+      type: response.context.type || '',
+      uri: response.context.uri || '',
+    } : null,
+    device,
+    fetchedAt,
+    isPlaying: Boolean(response?.is_playing),
+    progressMs: response?.progress_ms ?? 0,
+    repeatState: response?.repeat_state || '',
+    shuffleState: typeof response?.shuffle_state === 'boolean' ? response.shuffle_state : null,
+    timestamp: response?.timestamp ?? null,
+  };
+
+  if (!response?.item) {
+    return {
+      ...baseState,
+      isAvailable: false,
+      reason: unavailableReason,
+    };
+  }
+
+  const currentlyPlayingType = response.currently_playing_type || response.item?.type || 'unknown';
+  if (currentlyPlayingType !== 'track') {
+    return {
+      ...baseState,
+      isAvailable: false,
+      reason: 'unsupported_type',
+      currentlyPlayingType,
+    };
+  }
+
+  const track = response.item;
+  const normalizedTrack = normalizeTrack({
+    provider: MUSIC_PROVIDERS.spotify,
+    providerTrackId: track.id,
+    uri: track.uri,
+    isrc: track.external_ids?.isrc || '',
+    name: track.name,
+    artists: track.artists?.map(artist => artist?.name).filter(Boolean) || [],
+    album: {
+      providerAlbumId: track.album?.id,
+      name: track.album?.name,
+    },
+    releaseDate: track.album?.release_date,
+    durationMs: track.duration_ms,
+    popularity: track.popularity,
+    explicit: track.explicit,
+    rawSource: track,
+  });
+
+  return {
+    ...baseState,
+    isAvailable: true,
+    durationMs: track.duration_ms ?? normalizedTrack.durationMs,
+    track: normalizedTrack,
+    albumCover: track.album?.images?.[0]?.url || '',
+    externalUrl: track.external_urls?.spotify || '',
+    currentlyPlayingType,
+  };
+};
+
 const parseStoredNumber = (value) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
@@ -343,56 +425,20 @@ export const spotify = {
     );
     const fetchedAt = new Date().toISOString();
 
-    if (!response?.item) {
-      return {
-        isAvailable: false,
-        reason: 'no_active_playback',
-        fetchedAt,
-      };
-    }
+    return normalizeSpotifyPlayback(response, fetchedAt);
+  },
 
-    const currentlyPlayingType = response.currently_playing_type || 'unknown';
-    if (currentlyPlayingType !== 'track') {
-      return {
-        isAvailable: false,
-        reason: 'unsupported_type',
-        currentlyPlayingType,
-        isPlaying: Boolean(response.is_playing),
-        progressMs: response.progress_ms ?? 0,
-        fetchedAt,
-      };
-    }
+  async getPlaybackState(options = {}) {
+    const response = await this.apiCall(
+      'https://api.spotify.com/v1/me/player',
+      0,
+      null,
+      0,
+      options
+    );
+    const fetchedAt = new Date().toISOString();
 
-    const track = response.item;
-    const normalizedTrack = normalizeTrack({
-      provider: MUSIC_PROVIDERS.spotify,
-      providerTrackId: track.id,
-      uri: track.uri,
-      isrc: track.external_ids?.isrc || '',
-      name: track.name,
-      artists: track.artists?.map(artist => artist?.name).filter(Boolean) || [],
-      album: {
-        providerAlbumId: track.album?.id,
-        name: track.album?.name,
-      },
-      releaseDate: track.album?.release_date,
-      durationMs: track.duration_ms,
-      popularity: track.popularity,
-      explicit: track.explicit,
-      rawSource: track,
-    });
-
-    return {
-      isAvailable: true,
-      isPlaying: Boolean(response.is_playing),
-      progressMs: response.progress_ms ?? 0,
-      durationMs: track.duration_ms ?? normalizedTrack.durationMs,
-      fetchedAt,
-      track: normalizedTrack,
-      albumCover: track.album?.images?.[0]?.url || '',
-      externalUrl: track.external_urls?.spotify || '',
-      currentlyPlayingType,
-    };
+    return normalizeSpotifyPlayback(response, fetchedAt, 'no_active_device');
   },
 
   // Fetch all playlists (including the saved-tracks virtual playlist)
