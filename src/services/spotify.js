@@ -107,8 +107,38 @@ const getRequestAnchorIso = (startedAtMs, finishedAtMs = Date.now()) => {
   return new Date(anchorMs).toISOString();
 };
 
-const normalizeSpotifyPlayback = (response, fetchedAt, unavailableReason = 'no_active_playback') => {
+let stableClockDrift = null;
+
+const getClockDrift = (fetchedAtMs, serverDateMs) => {
+  const currentDrift = fetchedAtMs - serverDateMs;
+  if (stableClockDrift === null) {
+    stableClockDrift = currentDrift;
+  } else {
+    if (Math.abs(currentDrift - stableClockDrift) > 5000) {
+      stableClockDrift = currentDrift;
+    }
+  }
+  return stableClockDrift;
+};
+
+// Reset clock drift helper for testing
+export const resetStableClockDriftForTesting = () => {
+  stableClockDrift = null;
+};
+
+const normalizeSpotifyPlayback = (response, fetchedAt, unavailableReason = 'no_active_playback', serverDate = null) => {
   const device = normalizeSpotifyDevice(response?.device);
+
+  let calculatedFetchedAt = fetchedAt;
+  if (response?.timestamp && serverDate) {
+    const fetchedAtMs = Date.parse(fetchedAt);
+    const serverDateMs = Date.parse(serverDate);
+    if (Number.isFinite(fetchedAtMs) && Number.isFinite(serverDateMs)) {
+      const drift = getClockDrift(fetchedAtMs, serverDateMs);
+      calculatedFetchedAt = new Date(response.timestamp + drift).toISOString();
+    }
+  }
+
   const baseState = {
     context: response?.context ? {
       externalUrl: response.context.external_urls?.spotify || '',
@@ -116,7 +146,7 @@ const normalizeSpotifyPlayback = (response, fetchedAt, unavailableReason = 'no_a
       uri: response.context.uri || '',
     } : null,
     device,
-    fetchedAt,
+    fetchedAt: calculatedFetchedAt,
     isPlaying: Boolean(response?.is_playing),
     progressMs: response?.progress_ms ?? 0,
     repeatState: response?.repeat_state || '',
@@ -404,6 +434,9 @@ export const spotify = {
       });
 
       if (response.ok) {
+        if (typeof options.onResponseHeaders === 'function') {
+          options.onResponseHeaders(response.headers);
+        }
         return readSuccessfulResponseBody(response);
       }
 
@@ -502,30 +535,42 @@ export const spotify = {
 
   async getNowPlaying(options = {}) {
     const requestStartedAt = Date.now();
+    let serverDate = null;
     const response = await this.apiCall(
       'https://api.spotify.com/v1/me/player/currently-playing',
       0,
       null,
       0,
-      options
+      {
+        ...options,
+        onResponseHeaders: (headers) => {
+          serverDate = headers.get('Date');
+        },
+      }
     );
     const fetchedAt = getRequestAnchorIso(requestStartedAt);
 
-    return normalizeSpotifyPlayback(response, fetchedAt);
+    return normalizeSpotifyPlayback(response, fetchedAt, 'no_active_playback', serverDate);
   },
 
   async getPlaybackState(options = {}) {
     const requestStartedAt = Date.now();
+    let serverDate = null;
     const response = await this.apiCall(
       'https://api.spotify.com/v1/me/player',
       0,
       null,
       0,
-      options
+      {
+        ...options,
+        onResponseHeaders: (headers) => {
+          serverDate = headers.get('Date');
+        },
+      }
     );
     const fetchedAt = getRequestAnchorIso(requestStartedAt);
 
-    return normalizeSpotifyPlayback(response, fetchedAt, 'no_active_device');
+    return normalizeSpotifyPlayback(response, fetchedAt, 'no_active_device', serverDate);
   },
 
   async controlPlayback(command, payload = {}, options = {}) {

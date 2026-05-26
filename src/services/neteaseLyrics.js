@@ -3,6 +3,53 @@ const SEARCH_LIMIT = 8;
 const DURATION_TOLERANCE_MS = 8000;
 const FEATURE_HINT_PATTERN = /\s+(feat\.?|featuring|ft\.?)\s+.+$/i;
 
+const cleanSearchQuery = (query = '') => {
+  return query
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const cleanSearchQueryWithoutParentheses = (query = '') => {
+  return query
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const extractVersionTags = (name = '') => {
+  const normalized = name.toLowerCase();
+  const tags = new Set();
+
+  if (normalized.includes('live')) tags.add('live');
+  if (normalized.includes('acoustic')) tags.add('acoustic');
+  if (normalized.includes('remix') || normalized.includes('remixed')) tags.add('remix');
+  if (normalized.includes('cover')) tags.add('cover');
+  if (normalized.includes('instrumental')) tags.add('instrumental');
+  if (normalized.includes('demo')) tags.add('demo');
+
+  const partMatch = normalized.match(/(?:part|pt|vol|volume)\.?\s*(\d+|[ivxldm]+)/i);
+  if (partMatch) {
+    tags.add(`part-${partMatch[1]}`);
+  }
+
+  return tags;
+};
+
+const checkVersionMismatch = (targetName, candidateName) => {
+  const targetTags = extractVersionTags(targetName);
+  const candidateTags = extractVersionTags(candidateName);
+
+  for (const tag of targetTags) {
+    if (!candidateTags.has(tag)) return true;
+  }
+  for (const tag of candidateTags) {
+    if (!targetTags.has(tag)) return true;
+  }
+  return false;
+};
+
 const normalizeText = (value = '') => (
   String(value)
     .normalize('NFKD')
@@ -149,6 +196,11 @@ const scoreCandidate = (candidate, track) => {
 
   score += durationScoreFor(candidate.duration, track.durationMs);
   if (candidate.status !== 0) score -= 6;
+
+  if (checkVersionMismatch(track.name, candidate.name)) {
+    score -= 90;
+  }
+
   return score;
 };
 
@@ -185,11 +237,23 @@ export const createNeteaseLyricsClient = ({ apiBase = DEFAULT_API_BASE, fetchImp
   };
 
   const searchTrack = async (track, options = {}) => {
-    const queries = uniqueValues([
+    const targetArtists = getTargetArtistNames(track);
+    const primaryArtist = targetArtists[0] || '';
+    const allArtists = targetArtists.join(' ');
+
+    const rawQueries = [
       track.isrc,
-      [track.name, track.artistNames, track.albumName].filter(Boolean).join(' '),
-      [track.name, track.artistNames].filter(Boolean).join(' '),
-    ]);
+      [track.name, allArtists, track.albumName].filter(Boolean).join(' '),
+      [track.name, primaryArtist].filter(Boolean).join(' '),
+      [cleanSearchQueryWithoutParentheses(track.name), primaryArtist].filter(Boolean).join(' '),
+    ];
+
+    const queries = uniqueValues(
+      rawQueries.map(q => {
+        if (!q) return '';
+        return q === track.isrc ? q : cleanSearchQuery(q);
+      })
+    );
 
     for (const query of queries) {
       const data = await requestJson('/search/get/web', {

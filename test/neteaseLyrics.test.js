@@ -90,6 +90,64 @@ test('selectBestNeteaseMatch returns null when title matches but artists do not'
   assert.equal(match, null);
 });
 
+test('selectBestNeteaseMatch rejects mismatching versions (Acoustic vs Original, Part 1 vs Part 2)', () => {
+  // Acoustic vs Original
+  const acousticMatch = selectBestNeteaseMatch([
+    {
+      id: 1,
+      name: 'Song Name (Acoustic)',
+      duration: 180000,
+      artists: [{ name: 'Primary Artist' }],
+    },
+  ], {
+    artistNames: 'Primary Artist',
+    durationMs: 180000,
+    name: 'Song Name',
+  });
+  assert.equal(acousticMatch, null);
+
+  // Part 1 vs Part 2
+  const partMatch = selectBestNeteaseMatch([
+    {
+      id: 2,
+      name: 'Song Name, Pt. 2',
+      duration: 180000,
+      artists: [{ name: 'Primary Artist' }],
+    },
+  ], {
+    artistNames: 'Primary Artist',
+    durationMs: 180000,
+    name: 'Song Name, Pt. 1',
+  });
+  assert.equal(partMatch, null);
+});
+
+test('createNeteaseLyricsClient cleans search queries', async () => {
+  const queries = [];
+  const client = createNeteaseLyricsClient({
+    fetchImpl: async (url) => {
+      queries.push(url);
+      return {
+        ok: true,
+        async json() {
+          return { result: { songs: [] } };
+        },
+      };
+    },
+  });
+
+  await client.getLyricsForTrack({
+    name: 'Song (feat. Artist B) / Extra Tag',
+    artistNames: 'Artist A, Artist B',
+    albumName: 'Album / Title',
+    durationMs: 180000,
+  });
+
+  assert.match(queries[0], /s=Song\+feat\+Artist\+B\+Extra\+Tag\+Artist\+A\+Artist\+B\+Album\+Title/);
+  assert.match(queries[1], /s=Song\+feat\+Artist\+B\+Extra\+Tag\+Artist\+A/);
+  assert.match(queries[2], /s=Song\+Extra\+Tag\+Artist\+A/);
+});
+
 test('createNeteaseLyricsClient tries ISRC search before text search', async () => {
   const requests = [];
   const client = createNeteaseLyricsClient({
