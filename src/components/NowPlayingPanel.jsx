@@ -1,4 +1,18 @@
-import { ExternalLink, Loader2, Music, PauseCircle, PlayCircle, RefreshCw } from 'lucide-react';
+import {
+  ExternalLink,
+  Loader2,
+  Music,
+  Pause,
+  PauseCircle,
+  Play,
+  PlayCircle,
+  Repeat,
+  Repeat1,
+  Repeat2,
+  Shuffle,
+  SkipBack,
+  SkipForward,
+} from 'lucide-react';
 import { useI18n } from '../i18n';
 import { useNowPlaying } from '../hooks/useNowPlaying.js';
 
@@ -26,66 +40,27 @@ const formatRepeatState = (state, t) => {
   return t('nowPlaying.repeatOff');
 };
 
-const NowPlayingActions = ({
-  autoRefresh,
-  isLoading,
-  onAutoRefreshChange,
-  onRefresh,
-  t,
-  variant,
-}) => {
-  const isCompact = variant === 'compact';
-  const isDefault = variant === 'default';
-  const toggleTrackClass = isCompact ? 'h-4 w-7' : 'h-5 w-9';
-  const toggleKnobClass = isCompact ? 'h-3 w-3' : 'h-4 w-4';
-  const toggleCheckedTranslate = isCompact ? 'translate-x-3.5' : 'translate-x-4';
-  const buttonClass = isCompact
-    ? 'inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#e8e8ed] text-[#0071e3] transition-colors hover:bg-[#0071e3] hover:text-white disabled:cursor-not-allowed disabled:text-[#86868b] dark:bg-[#2d2d30]'
-    : `inline-flex h-9 w-9 items-center justify-center ${isDefault ? 'rounded-full' : 'rounded-lg'} bg-[#e8e8ed] text-[#0071e3] transition-colors hover:bg-[#0071e3] hover:text-white disabled:cursor-not-allowed disabled:text-[#86868b] dark:bg-[#2d2d30]`;
-  const labelClass = isDefault
-    ? 'inline-flex items-center gap-2 text-xs font-semibold text-[#6e6e73] dark:text-[#a1a1a6]'
-    : `${isCompact ? 'h-8 w-8' : 'h-9 w-9'} inline-flex items-center justify-center rounded-lg text-[#86868b] transition-colors hover:bg-[#f5f5f7] dark:hover:bg-[#2d2d30]`;
+const getNextRepeatState = (state) => {
+  if (state === 'off') return 'context';
+  if (state === 'context') return 'track';
+  return 'off';
+};
 
-  return (
-    <div className={`flex shrink-0 items-center ${isCompact ? 'gap-1.5' : 'gap-3'}`}>
-      <label className={labelClass}>
-        <input
-          type="checkbox"
-          checked={autoRefresh}
-          onChange={(event) => onAutoRefreshChange(event.target.checked)}
-          className="sr-only"
-          aria-label={t('nowPlaying.autoRefresh')}
-        />
-        <span className={`relative inline-flex ${toggleTrackClass} items-center rounded-full transition-colors ${
-          autoRefresh ? 'bg-[#0071e3]' : 'bg-[#d2d2d7] dark:bg-[#3a3a3c]'
-        }`}>
-          <span className={`inline-block ${toggleKnobClass} rounded-full bg-white transition-transform ${
-            autoRefresh ? toggleCheckedTranslate : 'translate-x-0.5'
-          }`} />
-        </span>
-        {isDefault && <span>{t('nowPlaying.autoRefresh')}</span>}
-      </label>
+const getRepeatLabel = (state, t) => {
+  if (state === 'track') return t('nowPlaying.repeatOneMode');
+  if (state === 'context') return t('nowPlaying.repeatPlaylistMode');
+  return t('nowPlaying.repeatOffMode');
+};
 
-      <button
-        type="button"
-        onClick={onRefresh}
-        disabled={isLoading}
-        aria-label={t('nowPlaying.refresh')}
-        className={buttonClass}
-      >
-        {isLoading ? (
-          <Loader2 size={isCompact ? 15 : 16} className="animate-spin" aria-hidden="true" />
-        ) : (
-          <RefreshCw size={isCompact ? 15 : 16} aria-hidden="true" />
-        )}
-      </button>
-    </div>
-  );
+const RepeatModeIcon = ({ state, size = 15 }) => {
+  if (state === 'track') return <Repeat1 size={size} aria-hidden="true" />;
+  if (state === 'context') return <Repeat2 size={size} aria-hidden="true" />;
+  return <Repeat size={size} aria-hidden="true" />;
 };
 
 const NowPlayingArtwork = ({ albumCover, trackName, t, variant }) => {
   const artworkClass = {
-    player: 'mx-auto flex aspect-square w-full max-w-[260px] items-center justify-center overflow-hidden rounded-lg border border-black/[0.04] bg-[#f0f0f2] dark:border-white/[0.04] dark:bg-[#161617]',
+    player: 'mx-auto flex aspect-square w-full max-w-[224px] items-center justify-center overflow-hidden rounded-xl border border-black/[0.04] bg-[#f0f0f2] shadow-sm dark:border-white/[0.04] dark:bg-[#161617] dark:shadow-none',
     compact: 'flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-black/[0.04] bg-[#f0f0f2] dark:border-white/[0.04] dark:bg-[#161617]',
     default: 'flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-xl border border-black/[0.04] bg-[#f0f0f2] dark:border-white/[0.04] dark:bg-[#161617]',
   }[variant];
@@ -248,12 +223,12 @@ const PlaybackStateBadges = ({ nowPlaying, t, variant }) => {
       {device?.isRestricted && (
         <span className={badgeClass}>{t('nowPlaying.restrictedDevice')}</span>
       )}
-      {typeof shuffleState === 'boolean' && (
+      {variant !== 'player' && typeof shuffleState === 'boolean' && (
         <span className={badgeClass}>
           {shuffleState ? t('nowPlaying.shuffleOn') : t('nowPlaying.shuffleOff')}
         </span>
       )}
-      {repeatState && (
+      {variant !== 'player' && repeatState && (
         <span className={badgeClass}>
           {t('nowPlaying.repeat')}: {formatRepeatState(repeatState, t)}
         </span>
@@ -312,37 +287,138 @@ const EmptyState = ({ message, variant }) => (
   </StateBlock>
 );
 
-const ErrorState = ({ error, onRefresh, t, variant }) => {
+const ErrorState = ({ error, variant }) => {
   if (variant === 'compact') {
     return (
-      <div className="flex min-h-12 items-center justify-between gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-200">
+      <div className="flex min-h-12 items-center rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-200">
         <span className="line-clamp-2">{error}</span>
-        <button
-          type="button"
-          onClick={onRefresh}
-          aria-label={t('nowPlaying.refresh')}
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/80 text-red-700 transition-colors hover:bg-white dark:bg-red-900/40 dark:text-red-100"
-        >
-          <RefreshCw size={13} aria-hidden="true" />
-        </button>
       </div>
     );
   }
 
   const className = variant === 'player'
     ? 'flex min-h-56 flex-col justify-center gap-3 rounded-lg bg-red-50 px-4 py-8 text-center text-sm font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-200'
-    : 'flex items-center justify-between gap-3 rounded-xl bg-red-50 px-4 py-4 text-sm font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-200';
+    : 'flex items-center rounded-xl bg-red-50 px-4 py-4 text-sm font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-200';
 
   return (
     <div className={className}>
       <span>{error}</span>
+    </div>
+  );
+};
+
+const PlaybackControlButton = ({
+  active = false,
+  children,
+  disabled,
+  label,
+  onClick,
+  pending,
+  size = 'md',
+}) => {
+  const isLarge = size === 'lg';
+  const sizeClass = isLarge ? 'h-12 w-12 rounded-full' : 'h-10 w-10 rounded-full';
+  const toneClass = isLarge
+    ? 'bg-[#1d1d1f] text-white shadow-[0_4px_14px_rgba(0,0,0,0.16)] hover:bg-[#2c2c2e] active:scale-[0.96] dark:bg-[#f5f5f7] dark:text-[#1d1d1f] dark:shadow-[0_4px_16px_rgba(0,0,0,0.32)] dark:hover:bg-white'
+    : active
+      ? 'text-[#0071e3] hover:text-[#005bb5] dark:text-[#8fc7ff] dark:hover:text-[#b8dcff]'
+      : 'text-[#6e6e73] hover:text-[#1d1d1f] dark:text-[#a1a1a6] dark:hover:text-[#f5f5f7]';
+
+  return (
+    <span className="relative inline-flex flex-col items-center">
       <button
         type="button"
-        onClick={onRefresh}
-        className={`${variant === 'player' ? 'inline-flex items-center justify-center rounded-lg px-3 py-2' : 'shrink-0 rounded-full px-3 py-1.5'} bg-white/80 text-xs font-bold text-red-700 transition-colors hover:bg-white dark:bg-red-900/40 dark:text-red-100`}
+        onClick={onClick}
+        disabled={disabled || pending}
+        aria-label={label}
+        aria-pressed={!isLarge && active ? true : undefined}
+        title={label}
+        className={`inline-flex shrink-0 items-center justify-center ${sizeClass} ${toneClass} outline-none transition-[background-color,color,transform,box-shadow] duration-200 focus-visible:ring-2 focus-visible:ring-[#0071e3]/40 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-[#c7c7cc] disabled:shadow-none disabled:hover:bg-transparent dark:disabled:text-[#545458]`}
       >
-        {t('nowPlaying.refresh')}
+        {pending ? <Loader2 size={size === 'lg' ? 18 : 15} className="animate-spin" aria-hidden="true" /> : children}
       </button>
+      {!isLarge && active && (
+        <span className="absolute -bottom-1 h-1 w-1 rounded-full bg-[#0071e3] dark:bg-[#8fc7ff]" aria-hidden="true" />
+      )}
+    </span>
+  );
+};
+
+const PlaybackControls = ({
+  canControlPlayback,
+  controlError,
+  controlPending,
+  controlPlayback,
+  nowPlaying,
+  t,
+}) => {
+  if (!canControlPlayback) return null;
+
+  const device = nowPlaying?.device || null;
+  const deviceId = device?.id || '';
+  const isDisabled = !device || device.isRestricted;
+  const isPlaying = Boolean(nowPlaying?.isPlaying);
+  const shuffleState = Boolean(nowPlaying?.shuffleState);
+  const repeatState = nowPlaying?.repeatState || 'off';
+  const basePayload = deviceId ? { deviceId } : {};
+  const repeatLabel = getRepeatLabel(repeatState, t);
+
+  return (
+    <div className="mt-5 flex flex-col items-center gap-2">
+      <div className="flex h-16 w-full max-w-[292px] items-center justify-between rounded-full border border-black/[0.04] bg-white/70 px-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-white/[0.055] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <PlaybackControlButton
+          active={shuffleState}
+          disabled={isDisabled}
+          label={shuffleState ? t('nowPlaying.turnShuffleOff') : t('nowPlaying.turnShuffleOn')}
+          onClick={() => controlPlayback('shuffle', { ...basePayload, state: !shuffleState })}
+          pending={controlPending === 'shuffle'}
+        >
+          <Shuffle size={15} aria-hidden="true" />
+        </PlaybackControlButton>
+        <PlaybackControlButton
+          disabled={isDisabled}
+          label={t('nowPlaying.previous')}
+          onClick={() => controlPlayback('previous', basePayload)}
+          pending={controlPending === 'previous'}
+        >
+          <SkipBack size={16} aria-hidden="true" />
+        </PlaybackControlButton>
+        <PlaybackControlButton
+          disabled={isDisabled}
+          label={isPlaying ? t('nowPlaying.pause') : t('nowPlaying.play')}
+          onClick={() => controlPlayback(isPlaying ? 'pause' : 'play', basePayload)}
+          pending={controlPending === 'play' || controlPending === 'pause'}
+          size="lg"
+        >
+          {isPlaying ? (
+            <Pause size={22} aria-hidden="true" />
+          ) : (
+            <Play size={22} className="translate-x-px" aria-hidden="true" />
+          )}
+        </PlaybackControlButton>
+        <PlaybackControlButton
+          disabled={isDisabled}
+          label={t('nowPlaying.next')}
+          onClick={() => controlPlayback('next', basePayload)}
+          pending={controlPending === 'next'}
+        >
+          <SkipForward size={16} aria-hidden="true" />
+        </PlaybackControlButton>
+        <PlaybackControlButton
+          active={repeatState !== 'off'}
+          disabled={isDisabled}
+          label={repeatLabel}
+          onClick={() => controlPlayback('repeat', { ...basePayload, state: getNextRepeatState(repeatState) })}
+          pending={controlPending === 'repeat'}
+        >
+          <RepeatModeIcon state={repeatState} />
+        </PlaybackControlButton>
+      </div>
+      {controlError && (
+        <p className="max-w-full text-center text-[11px] font-semibold text-red-600 dark:text-red-300">
+          {controlError}
+        </p>
+      )}
     </div>
   );
 };
@@ -392,7 +468,17 @@ const CompactContent = ({ durationMs, nowPlaying, progressMs, t, track }) => (
   </div>
 );
 
-const PlayerContent = ({ durationMs, nowPlaying, progressMs, t, track }) => (
+const PlayerContent = ({
+  canControlPlayback,
+  controlError,
+  controlPending,
+  controlPlayback,
+  durationMs,
+  nowPlaying,
+  progressMs,
+  t,
+  track,
+}) => (
   <div className="min-w-0">
     <NowPlayingArtwork
       albumCover={nowPlaying.albumCover}
@@ -403,6 +489,14 @@ const PlayerContent = ({ durationMs, nowPlaying, progressMs, t, track }) => (
     <TrackInfo nowPlaying={nowPlaying} t={t} track={track} variant="player" />
 
     <ProgressMeter durationMs={durationMs} progressMs={progressMs} t={t} variant="player" />
+    <PlaybackControls
+      canControlPlayback={canControlPlayback}
+      controlError={controlError}
+      controlPending={controlPending}
+      controlPlayback={controlPlayback}
+      nowPlaying={nowPlaying}
+      t={t}
+    />
     <PlaybackStateBadges nowPlaying={nowPlaying} t={t} variant="player" />
 
     <div className="mt-4 flex items-center justify-between gap-2">
@@ -417,15 +511,16 @@ const PlayerContent = ({ durationMs, nowPlaying, progressMs, t, track }) => (
 export const NowPlayingPanel = ({ provider, formatError, variant = 'default', onAuthExpired }) => {
   const { t } = useI18n();
   const {
-    autoRefresh,
+    canControlPlayback,
+    controlError,
+    controlPending,
+    controlPlayback,
     displayProgressMs,
     durationMs,
     error,
-    fetchNowPlaying,
     isLoading,
     isSupported,
     nowPlaying,
-    setAutoRefresh,
   } = useNowPlaying({ provider, formatError, onAuthExpired });
 
   if (!isSupported) return null;
@@ -443,12 +538,16 @@ export const NowPlayingPanel = ({ provider, formatError, variant = 'default', on
   const content = isLoading && !nowPlaying ? (
     <LoadingState t={t} variant={normalizedVariant} />
   ) : error ? (
-    <ErrorState error={error} onRefresh={() => fetchNowPlaying()} t={t} variant={normalizedVariant} />
+    <ErrorState error={error} variant={normalizedVariant} />
   ) : !isTrackAvailable ? (
     <EmptyState message={unavailableMessage} variant={normalizedVariant} />
   ) : normalizedVariant === 'player' ? (
     <PlayerContent
       durationMs={durationMs}
+      canControlPlayback={canControlPlayback}
+      controlError={controlError}
+      controlPending={controlPending}
+      controlPlayback={controlPlayback}
       nowPlaying={nowPlaying}
       progressMs={displayProgressMs}
       t={t}
@@ -476,16 +575,6 @@ export const NowPlayingPanel = ({ provider, formatError, variant = 'default', on
     return (
       <section className="w-full animate-fade-in-up">
         <div className="rounded-lg border border-[#e5e5e7] bg-white p-4 shadow-sm dark:border-[#333336]/60 dark:bg-[#1d1d1f] dark:shadow-none">
-          <div className="mb-4 flex items-center justify-end gap-2">
-            <NowPlayingActions
-              autoRefresh={autoRefresh}
-              isLoading={isLoading}
-              onAutoRefreshChange={setAutoRefresh}
-              onRefresh={() => fetchNowPlaying()}
-              t={t}
-              variant="player"
-            />
-          </div>
           {content}
         </div>
       </section>
@@ -496,24 +585,13 @@ export const NowPlayingPanel = ({ provider, formatError, variant = 'default', on
     return (
       <section className="w-full animate-fade-in-up">
         <div className="rounded-lg border border-[#e5e5e7] bg-white p-3 shadow-sm dark:border-[#333336]/60 dark:bg-[#1d1d1f] dark:shadow-none">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[#86868b]">
-                {t('nowPlaying.title')}
-              </p>
-              <p className="mt-0.5 truncate text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
-                {isTrackAvailable ? track.name : t('nowPlaying.emptyTitle')}
-              </p>
-            </div>
-
-            <NowPlayingActions
-              autoRefresh={autoRefresh}
-              isLoading={isLoading}
-              onAutoRefreshChange={setAutoRefresh}
-              onRefresh={() => fetchNowPlaying()}
-              t={t}
-              variant="compact"
-            />
+          <div className="mb-3 min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[#86868b]">
+              {t('nowPlaying.title')}
+            </p>
+            <p className="mt-0.5 truncate text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
+              {isTrackAvailable ? track.name : t('nowPlaying.emptyTitle')}
+            </p>
           </div>
 
           {content}
@@ -525,24 +603,13 @@ export const NowPlayingPanel = ({ provider, formatError, variant = 'default', on
   return (
     <section className="mb-6 w-full animate-fade-in-up">
       <div className="rounded-2xl border border-[#e5e5e7] bg-white p-4 shadow-sm dark:border-[#333336]/40 dark:bg-[#1d1d1f] dark:shadow-none md:p-5">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-[#86868b]">
-              {t('nowPlaying.title')}
-            </p>
-            <h2 className="text-base font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
-              {isTrackAvailable ? track.name : t('nowPlaying.emptyTitle')}
-            </h2>
-          </div>
-
-          <NowPlayingActions
-            autoRefresh={autoRefresh}
-            isLoading={isLoading}
-            onAutoRefreshChange={setAutoRefresh}
-            onRefresh={() => fetchNowPlaying()}
-            t={t}
-            variant="default"
-          />
+        <div className="mb-4">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-[#86868b]">
+            {t('nowPlaying.title')}
+          </p>
+          <h2 className="text-base font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
+            {isTrackAvailable ? track.name : t('nowPlaying.emptyTitle')}
+          </h2>
         </div>
 
         {content}

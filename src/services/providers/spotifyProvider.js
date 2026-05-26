@@ -33,6 +33,7 @@ export const spotifyProvider = assertMusicProvider({
   name: 'Spotify',
   capabilities: {
     nowPlaying: true,
+    playbackControl: true,
     playbackState: true,
   },
   authorize: (...args) => spotify.authorize(...args),
@@ -46,6 +47,7 @@ export const spotifyProvider = assertMusicProvider({
   addTracksToPlaylist: (...args) => spotify.addTracksToPlaylist(...args),
   restorePlaylist: (...args) => spotify.restorePlaylist(...args),
   searchTracks: (...args) => spotify.searchTracks(...args),
+  controlPlayback: (...args) => spotify.controlPlayback(...args),
   getNowPlaying: (...args) => spotify.getNowPlaying(...args),
   getPlaybackState: (...args) => spotify.getPlaybackState(...args),
   getErrorInfo: getSpotifyErrorInfo,

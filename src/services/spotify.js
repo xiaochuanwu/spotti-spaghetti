@@ -61,6 +61,20 @@ const readResponseBody = async (response) => {
   }
 };
 
+const readSuccessfulResponseBody = async (response) => {
+  if (response.status === 204 || response.status === 205) return null;
+
+  const text = await response.text();
+  if (!text) return null;
+
+  const contentType = response.headers.get('Content-Type') || '';
+  if (contentType.includes('application/json')) {
+    return JSON.parse(text);
+  }
+
+  return text;
+};
+
 const throwIfAborted = (signal) => {
   if (signal?.aborted) {
     throw createSpotifyError('SPOTIFY_REQUEST_CANCELLED');
@@ -147,6 +161,69 @@ const normalizeSpotifyPlayback = (response, fetchedAt, unavailableReason = 'no_a
     externalUrl: track.external_urls?.spotify || '',
     currentlyPlayingType,
   };
+};
+
+const withDeviceQuery = (url, deviceId = '') => {
+  if (!deviceId) return url;
+  const params = new URLSearchParams({ device_id: deviceId });
+  return `${url}?${params.toString()}`;
+};
+
+const getPlaybackControlRequest = (command, payload = {}) => {
+  const deviceId = payload.deviceId || '';
+  if (command === 'play') {
+    return {
+      method: 'PUT',
+      url: withDeviceQuery('https://api.spotify.com/v1/me/player/play', deviceId),
+    };
+  }
+  if (command === 'pause') {
+    return {
+      method: 'PUT',
+      url: withDeviceQuery('https://api.spotify.com/v1/me/player/pause', deviceId),
+    };
+  }
+  if (command === 'next') {
+    return {
+      method: 'POST',
+      url: withDeviceQuery('https://api.spotify.com/v1/me/player/next', deviceId),
+    };
+  }
+  if (command === 'previous') {
+    return {
+      method: 'POST',
+      url: withDeviceQuery('https://api.spotify.com/v1/me/player/previous', deviceId),
+    };
+  }
+  if (command === 'shuffle') {
+    const state = payload.state ? 'true' : 'false';
+    const params = new URLSearchParams({ state });
+    if (deviceId) params.set('device_id', deviceId);
+    return {
+      method: 'PUT',
+      url: `https://api.spotify.com/v1/me/player/shuffle?${params.toString()}`,
+    };
+  }
+  if (command === 'repeat') {
+    const state = ['track', 'context'].includes(payload.state) ? payload.state : 'off';
+    const params = new URLSearchParams({ state });
+    if (deviceId) params.set('device_id', deviceId);
+    return {
+      method: 'PUT',
+      url: `https://api.spotify.com/v1/me/player/repeat?${params.toString()}`,
+    };
+  }
+  if (command === 'seek') {
+    const positionMs = Math.max(0, Math.round(Number(payload.positionMs) || 0));
+    const params = new URLSearchParams({ position_ms: String(positionMs) });
+    if (deviceId) params.set('device_id', deviceId);
+    return {
+      method: 'PUT',
+      url: `https://api.spotify.com/v1/me/player/seek?${params.toString()}`,
+    };
+  }
+
+  throw createSpotifyError('SPOTIFY_UNSUPPORTED_PLAYBACK_CONTROL', { command });
 };
 
 const parseStoredNumber = (value) => {
@@ -318,8 +395,7 @@ export const spotify = {
       });
 
       if (response.ok) {
-        if (response.status === 204) return null;
-        return await response.json();
+        return readSuccessfulResponseBody(response);
       }
 
       if (response.status === 401) {
@@ -439,6 +515,15 @@ export const spotify = {
     const fetchedAt = new Date().toISOString();
 
     return normalizeSpotifyPlayback(response, fetchedAt, 'no_active_device');
+  },
+
+  async controlPlayback(command, payload = {}, options = {}) {
+    const request = getPlaybackControlRequest(command, payload);
+
+    return this.apiCall(request.url, 0, null, 0, {
+      method: request.method,
+      signal: options.signal,
+    });
   },
 
   // Fetch all playlists (including the saved-tracks virtual playlist)
