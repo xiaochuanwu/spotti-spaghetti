@@ -15,6 +15,7 @@ RUN npm ci
 
 # Copy only files required to build the static app
 COPY index.html vite.config.js ./
+COPY public ./public
 COPY src ./src
 
 RUN npm run build
