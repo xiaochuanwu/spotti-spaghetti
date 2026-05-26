@@ -153,7 +153,7 @@ test('createNeteaseLyricsClient tries ISRC search before text search', async () 
   const client = createNeteaseLyricsClient({
     fetchImpl: async (url) => {
       requests.push(url);
-      if (url.includes('/search/get/web')) {
+      if (url.includes('/search/get')) {
         return {
           ok: true,
           async json() {
@@ -202,7 +202,7 @@ test('createNeteaseLyricsClient searches and loads lyric lines', async () => {
   const client = createNeteaseLyricsClient({
     fetchImpl: async (url) => {
       requests.push(url);
-      if (url.includes('/search/get/web')) {
+      if (url.includes('/search/get')) {
         return {
           ok: true,
           async json() {

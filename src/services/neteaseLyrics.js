@@ -284,7 +284,7 @@ export const createNeteaseLyricsClient = ({ apiBase = DEFAULT_API_BASE, fetchImp
     );
 
     for (const query of queries) {
-      const data = await requestJson('/search/get/web', {
+      const data = await requestJson('/search/get', {
         s: query,
         type: '1',
         limit: String(SEARCH_LIMIT),
