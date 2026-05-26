@@ -92,6 +92,12 @@ export default function App() {
     getProviderErrorInfo(err).isCancelled
   ), [getProviderErrorInfo]);
 
+  const handleNowPlayingAuthExpired = useCallback((err) => {
+    setIsLoggedIn(false);
+    setStatusMessage('');
+    setErrorMessage(getErrorText(err));
+  }, [getErrorText]);
+
   const loadPlaylists = useCallback(async () => {
     setIsLoadingPlaylists(true);
     setErrorMessage('');
@@ -608,6 +614,7 @@ export default function App() {
                 inspector={(
                   <PlaybackPanel
                     formatError={getErrorText}
+                    onAuthExpired={handleNowPlayingAuthExpired}
                     provider={currentProvider}
                   />
                 )}
