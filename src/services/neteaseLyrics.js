@@ -183,35 +183,63 @@ const scoreCandidate = (candidate, track) => {
   const candidateAlbum = normalizeTitle(candidate.album?.name);
 
   let score = 0;
-  if (candidateName === targetName) score += 45;
-  else if (candidateName.includes(targetName) || targetName.includes(candidateName)) score += 25;
-  else score += Math.round(tokenOverlapScore(candidate.name, track.name) * 20);
-
-  score += artistScoreFor(candidate, track);
-
-  if (targetAlbum && candidateAlbum) {
-    if (targetAlbum === candidateAlbum) score += 14;
-    else score += Math.round(tokenOverlapScore(candidate.album?.name, track.albumName) * 10);
+  let titleMatchDetail = '';
+  if (candidateName === targetName) {
+    score += 45;
+    titleMatchDetail = 'Exact Match (+45)';
+  } else if (candidateName.includes(targetName) || targetName.includes(candidateName)) {
+    score += 25;
+    titleMatchDetail = 'Partial Match (+25)';
+  } else {
+    const overlap = Math.round(tokenOverlapScore(candidate.name, track.name) * 20);
+    score += overlap;
+    titleMatchDetail = `Token Overlap (+${overlap})`;
   }
 
-  score += durationScoreFor(candidate.duration, track.durationMs);
+  const artistScore = artistScoreFor(candidate, track);
+  score += artistScore;
+
+  let albumScore = 0;
+  if (targetAlbum && candidateAlbum) {
+    if (targetAlbum === candidateAlbum) albumScore = 14;
+    else albumScore = Math.round(tokenOverlapScore(candidate.album?.name, track.albumName) * 10);
+  }
+  score += albumScore;
+
+  const durationScore = durationScoreFor(candidate.duration, track.durationMs);
+  score += durationScore;
   if (candidate.status !== 0) score -= 6;
 
-  if (checkVersionMismatch(track.name, candidate.name)) {
+  const isMismatch = checkVersionMismatch(track.name, candidate.name);
+  if (isMismatch) {
     score -= 90;
   }
+
+  console.log(`[Score Details] Candidate: "${candidate.name}" by ${getCandidateArtistNames(candidate).join(',')} | Album: "${candidate.album?.name}" | Duration: ${candidate.duration}ms
+  - Title: ${titleMatchDetail}
+  - Artist Score: ${artistScore}
+  - Album Score: ${albumScore}
+  - Duration Score: ${durationScore}
+  - Version Mismatch Penalty: ${isMismatch ? -90 : 0}
+  - Status Penalty: ${candidate.status !== 0 ? -6 : 0}
+  - Total Score: ${score}`);
 
   return score;
 };
 
 export const selectBestNeteaseMatch = (songs = [], track = {}) => {
-  if (!songs.length) return null;
+  console.log(`[Lyrics Matching] Target Track: "${track.name}" by [${getTargetArtistNames(track).join(', ')}] | Album: "${track.albumName}" | Duration: ${track.durationMs}ms`);
+  if (!songs.length) {
+    console.log('[Lyrics Matching] No songs returned from NetEase.');
+    return null;
+  }
 
   const rankedSongs = songs
     .map((song) => ({ song, score: scoreCandidate(song, track) }))
     .sort((a, b) => b.score - a.score);
 
   const best = rankedSongs[0];
+  console.log(`[Lyrics Matching] Best Candidate: "${best.song.name}" | Score: ${best.score} (Threshold: 55)`);
   return best?.score >= 55 ? best.song : null;
 };
 
