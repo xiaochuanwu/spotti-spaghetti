@@ -148,6 +148,12 @@ test('isLoggedIn migrates legacy access token timestamp to expiresAt', () => {
   assert.equal(storage.getItem(STORAGE_KEYS.accessTokenTimestamp), null);
 });
 
+test('Spotify scopes include read-only playback state access', () => {
+  assert.match(SPOTIFY_CONFIG.scopes, /user-read-currently-playing/);
+  assert.match(SPOTIFY_CONFIG.scopes, /user-read-playback-state/);
+  assert.doesNotMatch(SPOTIFY_CONFIG.scopes, /user-modify-playback-state/);
+});
+
 test('apiCall clears auth and throws SPOTIFY_AUTH_EXPIRED on 401', async () => {
   const now = 1_700_000_000_000;
   Date.now = () => now;
@@ -290,4 +296,138 @@ test('getNowPlaying clears auth and throws SPOTIFY_AUTH_EXPIRED on 401', async (
 
   assert.equal(storage.getItem(STORAGE_KEYS.accessToken), null);
   assert.equal(storage.getItem(STORAGE_KEYS.accessTokenExpiresAt), null);
+});
+
+test('getPlaybackState returns active device, shuffle, and repeat state', async () => {
+  const now = 1_700_000_000_000;
+  Date.now = () => now;
+  setValidToken(now);
+
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, 'https://api.spotify.com/v1/me/player');
+    assert.equal(options.headers.Authorization, 'Bearer valid-token');
+    return jsonResponse({
+      device: {
+        id: 'device-1',
+        is_active: true,
+        is_private_session: false,
+        is_restricted: false,
+        name: 'Desk Mac',
+        supports_volume: true,
+        type: 'Computer',
+        volume_percent: 66,
+      },
+      shuffle_state: true,
+      repeat_state: 'context',
+      timestamp: now - 500,
+      is_playing: true,
+      progress_ms: 42_000,
+      currently_playing_type: 'track',
+      item: {
+        id: 'track-1',
+        uri: 'spotify:track:track-1',
+        name: 'Current Song',
+        duration_ms: 180_000,
+        popularity: 73,
+        explicit: true,
+        external_ids: { isrc: 'USRC17607839' },
+        external_urls: { spotify: 'https://open.spotify.com/track/track-1' },
+        artists: [{ id: 'artist-1', name: 'Artist One' }],
+        album: {
+          id: 'album-1',
+          name: 'Current Album',
+          release_date: '2026-05-22',
+          images: [{ url: 'https://example.test/cover-large.jpg' }],
+        },
+      },
+      context: {
+        type: 'playlist',
+        uri: 'spotify:playlist:playlist-1',
+        external_urls: { spotify: 'https://open.spotify.com/playlist/playlist-1' },
+      },
+    });
+  };
+
+  const playbackState = await spotify.getPlaybackState();
+
+  assert.equal(playbackState.isAvailable, true);
+  assert.equal(playbackState.isPlaying, true);
+  assert.equal(playbackState.shuffleState, true);
+  assert.equal(playbackState.repeatState, 'context');
+  assert.equal(playbackState.timestamp, now - 500);
+  assert.deepEqual(playbackState.device, {
+    id: 'device-1',
+    isActive: true,
+    isPrivateSession: false,
+    isRestricted: false,
+    name: 'Desk Mac',
+    supportsVolume: true,
+    type: 'Computer',
+    volumePercent: 66,
+  });
+  assert.deepEqual(playbackState.context, {
+    externalUrl: 'https://open.spotify.com/playlist/playlist-1',
+    type: 'playlist',
+    uri: 'spotify:playlist:playlist-1',
+  });
+  assert.equal(playbackState.track.name, 'Current Song');
+});
+
+test('getPlaybackState returns no active device when Spotify responds 204', async () => {
+  const now = 1_700_000_000_000;
+  Date.now = () => now;
+  setValidToken(now);
+  globalThis.fetch = async () => new Response(null, { status: 204 });
+
+  const playbackState = await spotify.getPlaybackState();
+
+  assert.equal(playbackState.isAvailable, false);
+  assert.equal(playbackState.reason, 'no_active_device');
+  assert.equal(playbackState.device, null);
+  assert.match(playbackState.fetchedAt, /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test('getPlaybackState returns unavailable for non-track playback types with device state', async () => {
+  const now = 1_700_000_000_000;
+  Date.now = () => now;
+  setValidToken(now);
+  globalThis.fetch = async () => jsonResponse({
+    device: {
+      id: 'phone-1',
+      is_active: true,
+      name: 'Phone',
+      type: 'Smartphone',
+    },
+    is_playing: false,
+    progress_ms: 1_000,
+    repeat_state: 'off',
+    shuffle_state: false,
+    currently_playing_type: 'episode',
+    item: { id: 'episode-1', type: 'episode' },
+  });
+
+  const playbackState = await spotify.getPlaybackState();
+
+  assert.equal(playbackState.isAvailable, false);
+  assert.equal(playbackState.reason, 'unsupported_type');
+  assert.equal(playbackState.currentlyPlayingType, 'episode');
+  assert.equal(playbackState.isPlaying, false);
+  assert.equal(playbackState.progressMs, 1_000);
+  assert.equal(playbackState.device.name, 'Phone');
+  assert.equal(playbackState.shuffleState, false);
+  assert.equal(playbackState.repeatState, 'off');
+});
+
+test('getPlaybackState surfaces missing playback scope as permission denied', async () => {
+  const now = 1_700_000_000_000;
+  Date.now = () => now;
+  setValidToken(now);
+  globalThis.fetch = async () => jsonResponse({ error: { status: 403 } }, { status: 403 });
+
+  await assert.rejects(
+    () => spotify.getPlaybackState(),
+    error => error.code === 'SPOTIFY_PERMISSION_DENIED'
+  );
+
+  assert.equal(storage.getItem(STORAGE_KEYS.accessToken), 'valid-token');
 });
