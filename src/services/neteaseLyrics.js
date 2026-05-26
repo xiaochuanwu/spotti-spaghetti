@@ -290,6 +290,7 @@ export const createNeteaseLyricsClient = ({ apiBase = DEFAULT_API_BASE, fetchImp
         limit: String(SEARCH_LIMIT),
         offset: '0',
       }, options);
+      console.log(`[Lyrics Matching] Query: "${query}" | Response Data:`, data);
       const match = selectBestNeteaseMatch(data?.result?.songs || [], track);
       if (match) return match;
     }
