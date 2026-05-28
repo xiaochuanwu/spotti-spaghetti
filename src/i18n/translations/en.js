@@ -186,6 +186,8 @@ export const en = {
   'lyrics.providerSource': (source) => `Lyrics source: ${source}`,
   'lyrics.sourceNetease': 'NetEase',
   'lyrics.seekTo': (time) => `Seek playback to ${time}`,
+  'lyrics.sync': 'Sync',
+  'lyrics.syncToActive': 'Return to current lyric',
 
   // Progress
   'progress.batchTitle': 'Batch exporting playlists',

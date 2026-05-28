@@ -14,7 +14,6 @@ import {
   SkipForward,
 } from 'lucide-react';
 import { useI18n } from '../i18n';
-import { useNowPlaying } from '../hooks/useNowPlaying.js';
 
 const formatDuration = (ms) => {
   const totalSeconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
@@ -521,7 +520,7 @@ const PlayerContent = ({
   </div>
 );
 
-export const NowPlayingPanel = ({ provider, formatError, variant = 'default', onAuthExpired }) => {
+export const NowPlayingPanel = ({ playback, variant = 'default' }) => {
   const { t } = useI18n();
   const {
     canControlPlayback,
@@ -534,7 +533,7 @@ export const NowPlayingPanel = ({ provider, formatError, variant = 'default', on
     isLoading,
     isSupported,
     nowPlaying,
-  } = useNowPlaying({ provider, formatError, onAuthExpired });
+  } = playback || {};
 
   if (!isSupported) return null;
 

@@ -43,7 +43,6 @@ export const WorkspaceView = ({
   formatError,
   history,
   latestDiff,
-  onAuthExpired,
   onClearHistory,
   onDeleteHistory,
   onExportAll,
@@ -57,9 +56,9 @@ export const WorkspaceView = ({
   onSelectedPlaylistIdsChange,
   onToolChange,
   onViewModeChange,
+  playback,
   playlistCount,
   playlists,
-  provider,
   searchQuery,
   selectedPlaylistIds,
   viewMode,
@@ -122,9 +121,7 @@ export const WorkspaceView = ({
 
       {currentTool === 'lyrics' && (
         <LyricsPanel
-          formatError={formatError}
-          onAuthExpired={onAuthExpired}
-          provider={provider}
+          playback={playback}
         />
       )}
     </section>

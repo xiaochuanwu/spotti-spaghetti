@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { neteaseLyrics } from '../services/neteaseLyrics.js';
 
 const serializeArtists = (artists) => (Array.isArray(artists) ? JSON.stringify(artists) : '[]');
+
+const loadNeteaseLyricsClient = () => import('../services/neteaseLyrics.js')
+  .then(({ neteaseLyrics }) => neteaseLyrics);
 
 const parseArtists = (value) => {
   try {
@@ -90,9 +92,13 @@ export const useLyrics = ({ isAvailable, track }) => {
 
     const abortController = new AbortController();
 
-    neteaseLyrics
-      .getLyricsForTrack(trackForLyrics, { signal: abortController.signal })
+    loadNeteaseLyricsClient()
+      .then((lyricsClient) => {
+        if (abortController.signal.aborted) return null;
+        return lyricsClient.getLyricsForTrack(trackForLyrics, { signal: abortController.signal });
+      })
       .then((result) => {
+        if (!result || abortController.signal.aborted) return;
         window.clearTimeout(loadingId);
         setLyricsState({
           error: '',

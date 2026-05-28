@@ -186,6 +186,8 @@ export const zh = {
   'lyrics.providerSource': (source) => `歌词来源: ${source}`,
   'lyrics.sourceNetease': '网易云',
   'lyrics.seekTo': (time) => `跳转播放到 ${time}`,
+  'lyrics.sync': '同步',
+  'lyrics.syncToActive': '回到当前歌词',
 
   // Progress
   'progress.batchTitle': '正在批量导出歌单',

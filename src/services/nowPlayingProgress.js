@@ -4,13 +4,14 @@ const toFiniteNumber = (value) => {
 };
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+const DEFAULT_DISPLAY_LATENCY_MS = 500;
 
 const parseFetchedAtMs = (fetchedAt) => {
-  if (typeof fetchedAt === 'number') {
+  if (typeof fetchedAt === "number") {
     return Number.isFinite(fetchedAt) ? fetchedAt : null;
   }
 
-  if (typeof fetchedAt !== 'string' || fetchedAt.trim() === '') {
+  if (typeof fetchedAt !== "string" || fetchedAt.trim() === "") {
     return null;
   }
 
@@ -18,12 +19,16 @@ const parseFetchedAtMs = (fetchedAt) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-export const calculateDisplayProgressMs = ({
-  progressMs = 0,
-  durationMs = 0,
-  isPlaying = false,
-  fetchedAt = null,
-} = {}, nowMs = Date.now()) => {
+export const calculateDisplayProgressMs = (
+  {
+    progressMs = 0,
+    durationMs = 0,
+    isPlaying = false,
+    fetchedAt = null,
+    displayLatencyMs = DEFAULT_DISPLAY_LATENCY_MS,
+  } = {},
+  nowMs = Date.now(),
+) => {
   const duration = Math.max(0, toFiniteNumber(durationMs));
   if (duration <= 0) return 0;
 
@@ -34,6 +39,7 @@ export const calculateDisplayProgressMs = ({
   const currentMs = toFiniteNumber(nowMs);
   if (fetchedAtMs === null || currentMs <= 0) return baseProgress;
 
+  const latencyMs = clamp(toFiniteNumber(displayLatencyMs), 0, 5000);
   const elapsedMs = Math.max(0, currentMs - fetchedAtMs);
-  return clamp(baseProgress + elapsedMs, 0, duration);
+  return clamp(baseProgress + elapsedMs - latencyMs, 0, duration);
 };

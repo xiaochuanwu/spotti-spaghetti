@@ -1,12 +1,10 @@
 import { NowPlayingPanel } from '../NowPlayingPanel.jsx';
 
-export const PlaybackPanel = ({ formatError, onAuthExpired, provider }) => {
+export const PlaybackPanel = ({ playback }) => {
   return (
     <section className="min-w-0">
       <NowPlayingPanel
-        provider={provider}
-        formatError={formatError}
-        onAuthExpired={onAuthExpired}
+        playback={playback}
         variant="player"
       />
     </section>

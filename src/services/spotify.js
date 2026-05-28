@@ -107,51 +107,8 @@ const getRequestAnchorIso = (startedAtMs, finishedAtMs = Date.now()) => {
   return new Date(anchorMs).toISOString();
 };
 
-let stableClockDrift = null;
-let driftMeasurementPromise = null;
-
-const ensureClockDriftMeasured = () => {
-  if (driftMeasurementPromise) return driftMeasurementPromise;
-
-  driftMeasurementPromise = (async () => {
-    try {
-      const startedAt = Date.now();
-      const res = await fetch(window.location.origin, { method: 'HEAD' });
-      const finishedAt = Date.now();
-      const serverDate = res.headers.get('Date');
-      if (serverDate) {
-        const clientMidpoint = (startedAt + finishedAt) / 2;
-        stableClockDrift = clientMidpoint - Date.parse(serverDate);
-        return;
-      }
-    } catch (e) {
-      console.warn('Failed to estimate clock drift from origin:', e);
-    }
-    stableClockDrift = 0;
-  })();
-
-  return driftMeasurementPromise;
-};
-
-// Set clock drift helper for testing
-export const setStableClockDriftForTesting = (drift) => {
-  stableClockDrift = drift;
-  driftMeasurementPromise = Promise.resolve();
-};
-
-// Reset clock drift helper for testing
-export const resetStableClockDriftForTesting = () => {
-  stableClockDrift = null;
-  driftMeasurementPromise = null;
-};
-
 const normalizeSpotifyPlayback = (response, fetchedAt, unavailableReason = 'no_active_playback') => {
   const device = normalizeSpotifyDevice(response?.device);
-
-  let calculatedFetchedAt = fetchedAt;
-  if (response?.timestamp && stableClockDrift !== null) {
-    calculatedFetchedAt = new Date(response.timestamp + stableClockDrift).toISOString();
-  }
 
   const baseState = {
     context: response?.context ? {
@@ -160,7 +117,7 @@ const normalizeSpotifyPlayback = (response, fetchedAt, unavailableReason = 'no_a
       uri: response.context.uri || '',
     } : null,
     device,
-    fetchedAt: calculatedFetchedAt,
+    fetchedAt,
     isPlaying: Boolean(response?.is_playing),
     progressMs: response?.progress_ms ?? 0,
     repeatState: response?.repeat_state || '',
@@ -545,7 +502,6 @@ export const spotify = {
   },
 
   async getNowPlaying(options = {}) {
-    await ensureClockDriftMeasured();
     const requestStartedAt = Date.now();
     const response = await this.apiCall(
       'https://api.spotify.com/v1/me/player/currently-playing',
@@ -560,7 +516,6 @@ export const spotify = {
   },
 
   async getPlaybackState(options = {}) {
-    await ensureClockDriftMeasured();
     const requestStartedAt = Date.now();
     const response = await this.apiCall(
       'https://api.spotify.com/v1/me/player',

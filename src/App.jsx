@@ -12,6 +12,7 @@ import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useI18n } from './i18n';
 import { PlaylistPreviewModal } from './components/PlaylistPreviewModal';
 import { useThemePreference } from './hooks/useThemePreference.js';
+import { useNowPlaying } from './hooks/useNowPlaying.js';
 import { batchSession } from './services/batchSession.js';
 import { exportHistory, getTrackUrisFromSnapshot } from './services/exportHistory.js';
 import { DEFAULT_PROVIDER_ID, getMusicProvider } from './services/providers/providerRegistry.js';
@@ -97,6 +98,13 @@ export default function App() {
     setStatusMessage('');
     setErrorMessage(getErrorText(err));
   }, [getErrorText]);
+
+  const playbackState = useNowPlaying({
+    enabled: isLoggedIn,
+    provider: currentProvider,
+    formatError: getErrorText,
+    onAuthExpired: handleNowPlayingAuthExpired,
+  });
 
   const loadPlaylists = useCallback(async () => {
     setIsLoadingPlaylists(true);
@@ -505,7 +513,6 @@ export default function App() {
     () => playlists.map(localizePlaylist),
     [localizePlaylist, playlists]
   );
-
   const filteredPlaylists = useMemo(() => {
     if (!searchQuery.trim()) return localizedPlaylists;
     const query = searchQuery.toLowerCase().trim();
@@ -513,7 +520,7 @@ export default function App() {
   }, [localizedPlaylists, searchQuery]);
 
   return (
-    <div className="relative flex-1 w-full max-w-[1680px] mx-auto flex flex-col px-4 pb-4 md:px-6 md:pb-6 min-h-screen">
+    <div className="relative flex-1 w-full max-w-[1680px] mx-auto flex flex-col overflow-x-hidden px-4 md:px-6 min-h-screen pb-4 md:pb-6">
       {!isLoggedIn && (
         <div
           className="fixed inset-0 pointer-events-none z-0 hidden dark:block"
@@ -598,7 +605,6 @@ export default function App() {
                     history={historySnapshots}
                     latestDiff={latestDiff}
                     formatError={getErrorText}
-                    onAuthExpired={handleNowPlayingAuthExpired}
                     onClearHistory={clearHistory}
                     onDeleteHistory={deleteHistorySnapshot}
                     onExportHistory={exportLocalHistory}
@@ -606,7 +612,7 @@ export default function App() {
                     onRestorePlaylist={handleRestorePlaylist}
                     onRestoreSnapshot={handleRestoreSnapshot}
                     onToolChange={setActiveTool}
-                    provider={currentProvider}
+                    playback={playbackState}
                     onPreview={(playlist) => {
                       setPreviewPlaylist(playlist);
                       setIsPreviewOpen(true);
@@ -615,9 +621,7 @@ export default function App() {
                 )}
                 inspector={(
                   <PlaybackPanel
-                    formatError={getErrorText}
-                    onAuthExpired={handleNowPlayingAuthExpired}
-                    provider={currentProvider}
+                    playback={playbackState}
                   />
                 )}
               />

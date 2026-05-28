@@ -55,7 +55,7 @@ globalThis.window = {
 
 const { STORAGE_KEYS } = await import('../src/config/storage.js');
 const { SPOTIFY_CONFIG } = await import('../src/config/spotify.js');
-const { spotify, resetStableClockDriftForTesting, setStableClockDriftForTesting } = await import('../src/services/spotify.js');
+const { spotify } = await import('../src/services/spotify.js');
 
 SPOTIFY_CONFIG.clientId = 'test-client-id';
 
@@ -84,7 +84,6 @@ test.beforeEach(() => {
   globalThis.fetch = originalFetch;
   console.error = () => {};
   console.warn = () => {};
-  resetStableClockDriftForTesting();
 });
 
 test.after(() => {
@@ -251,10 +250,7 @@ test('getNowPlaying returns normalized track data for current Spotify track', as
   assert.match(nowPlaying.fetchedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
-test('getNowPlaying anchors progress to the state update timestamp when clock drift is zero', async () => {
-  resetStableClockDriftForTesting();
-  setStableClockDriftForTesting(0);
-
+test('getNowPlaying anchors progress to the local request midpoint', async () => {
   const now = 1_700_000_000_000;
   const timestamps = [now, now + 800];
   Date.now = () => timestamps.shift() ?? now + 800;
@@ -277,16 +273,11 @@ test('getNowPlaying anchors progress to the state update timestamp when clock dr
 
   const nowPlaying = await spotify.getNowPlaying();
 
-  assert.equal(nowPlaying.fetchedAt, new Date(now - 10_000).toISOString());
+  assert.equal(nowPlaying.fetchedAt, new Date(now + 400).toISOString());
   assert.equal(nowPlaying.timestamp, now - 10_000);
-
-  resetStableClockDriftForTesting();
 });
 
-test('getNowPlaying adjusts fetchedAt for clock drift using setStableClockDriftForTesting', async () => {
-  resetStableClockDriftForTesting();
-  setStableClockDriftForTesting(5400);
-
+test('getNowPlaying preserves Spotify timestamp without using it as the progress anchor', async () => {
   const now = 1_700_000_000_000;
   const timestamps = [now, now + 800];
   Date.now = () => timestamps.shift() ?? now + 800;
@@ -311,11 +302,8 @@ test('getNowPlaying adjusts fetchedAt for clock drift using setStableClockDriftF
 
   const nowPlaying = await spotify.getNowPlaying();
 
-  const expectedFetchedAtIso = new Date(playbackTimestamp + 5400).toISOString();
-  assert.equal(nowPlaying.fetchedAt, expectedFetchedAtIso);
+  assert.equal(nowPlaying.fetchedAt, new Date(now + 400).toISOString());
   assert.equal(nowPlaying.timestamp, playbackTimestamp);
-
-  resetStableClockDriftForTesting();
 });
 
 test('getNowPlaying returns unavailable when Spotify responds 204', async () => {

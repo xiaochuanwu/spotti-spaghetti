@@ -17,7 +17,7 @@ test('createOptimisticPlaybackState pauses immediately at the display progress',
   const snapshot = createOptimisticPlaybackState(baseSnapshot, 'pause', {}, nowMs);
 
   assert.equal(snapshot.isPlaying, false);
-  assert.equal(snapshot.progressMs, 44_000);
+  assert.equal(snapshot.progressMs, 43_500);
   assert.equal(snapshot.fetchedAt, '2026-05-26T10:00:02.000Z');
 });
 

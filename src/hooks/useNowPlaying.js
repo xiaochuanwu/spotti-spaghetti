@@ -12,7 +12,12 @@ const PLAYBACK_STATE_RECONCILE_DELAY_MS = 800;
 const TRACK_END_REFRESH_WINDOW_MS = 5000;
 const TRACK_END_REFRESH_THROTTLE_MS = 10000;
 
-export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => {
+export const useNowPlaying = ({
+  enabled = true,
+  provider,
+  formatError,
+  onAuthExpired,
+} = {}) => {
   const { t } = useI18n();
   const [nowPlaying, setNowPlaying] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,8 +33,8 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
   const readPlaybackState = provider?.capabilities?.playbackState && provider?.getPlaybackState
     ? provider.getPlaybackState
     : provider?.getNowPlaying;
-  const canControlPlayback = Boolean(provider?.capabilities?.playbackControl && provider?.controlPlayback);
-  const isSupported = Boolean(readPlaybackState);
+  const canControlPlayback = Boolean(enabled && provider?.capabilities?.playbackControl && provider?.controlPlayback);
+  const isSupported = Boolean(enabled && readPlaybackState);
 
   const fetchNowPlaying = useCallback(async ({ silent = false } = {}) => {
     if (!isSupported) return;
@@ -69,6 +74,27 @@ export const useNowPlaying = ({ provider, formatError, onAuthExpired } = {}) => 
       }
     }
   }, [formatError, isSupported, onAuthExpired, provider, readPlaybackState, t]);
+
+  useEffect(() => {
+    if (enabled) return undefined;
+
+    abortRef.current?.abort();
+    window.clearTimeout(reconcileTimeoutRef.current);
+    lastNowPlayingRef.current = null;
+    nearEndRefreshRef.current = { key: '', triggeredAt: 0 };
+
+    const resetId = window.setTimeout(() => {
+      setNowPlaying(null);
+      setIsLoading(false);
+      setControlPending('');
+      setControlError('');
+      setError('');
+    }, 0);
+
+    return () => {
+      window.clearTimeout(resetId);
+    };
+  }, [enabled]);
 
   const controlPlayback = useCallback(async (command, payload = {}) => {
     if (!canControlPlayback) return;
