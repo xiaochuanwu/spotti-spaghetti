@@ -257,6 +257,64 @@ test('selectBestNeteaseMatch scores candidate aliases and translated names', () 
   assert.equal(match.id, 1);
 });
 
+test('selectBestNeteaseMatch splits composite artist names from provider metadata', () => {
+  const match = selectBestNeteaseMatch([
+    {
+      id: 1,
+      name: 'Duet Song',
+      duration: 180000,
+      artists: [{ name: 'Primary Artist' }, { name: 'Featured Artist' }],
+    },
+  ], {
+    artistNames: 'Primary Artist & Featured Artist',
+    durationMs: 180000,
+    name: 'Duet Song',
+  });
+
+  assert.equal(match.id, 1);
+});
+
+test('selectBestNeteaseMatch accepts compilation artist labels for large ensembles', () => {
+  const match = selectBestNeteaseMatch([
+    {
+      id: 1,
+      name: 'Festival Song',
+      duration: 240000,
+      artists: [{ name: '群星' }],
+    },
+  ], {
+    artists: [
+      'Artist A',
+      'Artist B',
+      'Artist C',
+      'Artist D',
+      'Artist E',
+      'Artist F',
+    ],
+    durationMs: 240000,
+    name: 'Festival Song',
+  });
+
+  assert.equal(match.id, 1);
+});
+
+test('selectBestNeteaseMatch rejects large duration mismatches for synced lyrics', () => {
+  const match = selectBestNeteaseMatch([
+    {
+      id: 1,
+      name: 'Same Song',
+      duration: 220000,
+      artists: [{ name: 'Primary Artist' }],
+    },
+  ], {
+    artistNames: 'Primary Artist',
+    durationMs: 180000,
+    name: 'Same Song',
+  });
+
+  assert.equal(match, null);
+});
+
 test('createNeteaseLyricsClient cleans search queries', async () => {
   const queries = [];
   const client = createNeteaseLyricsClient({

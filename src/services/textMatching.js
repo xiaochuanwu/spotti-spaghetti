@@ -1,10 +1,13 @@
 import { Converter } from 'opencc-js/t2cn';
 
-const DURATION_TOLERANCE_MS = 8000;
 const FEATURE_HINT_PATTERN = /\s+(feat\.?|featuring|ft\.?)\s+.+$/i;
 export const MATCH_SCORE_THRESHOLD = 55;
 const CJK_CHARACTER_PATTERN = /\p{Script=Han}/u;
 export const BRACKET_CONTENT_PATTERN = /\([^)]*\)|\[[^\]]*\]|（[^）]*）|【[^】]*】/g;
+const DECORATION_BOUNDARY_PATTERN = /\s*(?:\(|-)\s*(deluxe|explicit|special edition|bonus track|feat\.?|featuring|ft\.?|with)\b/i;
+const BENIGN_DECORATION_PATTERN = /\s*(?:\((?:deluxe|explicit|special edition|bonus track)[^)]*\)|-\s*(?:deluxe|explicit|special edition|bonus track).*)/gi;
+const COMPOSITE_ARTIST_SEPARATOR_PATTERN = /\s*(?:,|、|\/|&|\band\b|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bwith\b)\s*/i;
+const VARIOUS_ARTISTS_PATTERN = /\bvarious\b|群星/i;
 
 const convertHongKongTraditionalToSimplified = Converter({ from: 'hk', to: 'cn' });
 const convertTaiwanTraditionalToSimplified = Converter({ from: 'tw', to: 'cn' });
@@ -115,6 +118,19 @@ export const normalizeTitle = (value = '') => normalizeText(
   stripFeatureHints(value)
 );
 
+const normalizeNameWithDecorations = (value = '') => (
+  normalizeChineseScriptVariants(
+    normalizeEquivalentPunctuation(value)
+      .normalize('NFKD')
+      .toLowerCase()
+      .replace(/\bacoustic version\b/g, 'acoustic')
+      .replace(/\s*-\s*/g, ' - ')
+      .replace(/[^\p{L}\p{N}()'&,\s/-]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
+);
+
 const tokenSetFor = (value = '') => new Set(normalizeText(value).split(' ').filter(Boolean));
 
 const tokenOverlapScore = (left = '', right = '') => {
@@ -175,8 +191,59 @@ const normalizeLooseName = (value = '') => normalizeTitle(value).replace(/\s+/g,
 const removeNameDecorations = (value = '') => normalizeText(
   String(value)
     .replace(/\s*[-–—]\s*/g, ' ')
+    .replace(BENIGN_DECORATION_PATTERN, ' ')
     .replace(/\b(acoustic version|explicit|deluxe|special edition|bonus track)\b/gi, ' ')
 );
+
+const stripBenignNameDecorations = (value = '') => normalizeText(
+  normalizeNameWithDecorations(value).replace(BENIGN_DECORATION_PATTERN, ' ')
+);
+
+const getNamePrefixBeforeDecoration = (value = '') => {
+  const normalized = normalizeNameWithDecorations(value);
+  const match = normalized.match(DECORATION_BOUNDARY_PATTERN);
+  if (!match) return '';
+  return normalizeText(normalized.slice(0, match.index));
+};
+
+const hasEquivalentDecorationBoundary = (target = '', candidate = '') => {
+  const targetPrefix = getNamePrefixBeforeDecoration(target);
+  const candidatePrefix = getNamePrefixBeforeDecoration(candidate);
+  const normalizedTarget = normalizeText(target);
+  const normalizedCandidate = normalizeText(candidate);
+
+  return Boolean(
+    (targetPrefix && targetPrefix === normalizedCandidate)
+      || (candidatePrefix && candidatePrefix === normalizedTarget)
+      || (targetPrefix && candidatePrefix && targetPrefix === candidatePrefix)
+  );
+};
+
+const hasBracketRootMatch = (target = '', candidate = '') => {
+  const targetName = normalizeNameWithDecorations(target);
+  const candidateName = normalizeNameWithDecorations(candidate);
+  const targetRoot = normalizeText(targetName.split('(')[0] || '');
+  const candidateRoot = normalizeText(candidateName.split('(')[0] || '');
+
+  return Boolean(
+    targetRoot
+      && candidateRoot
+      && targetRoot === candidateRoot
+      && (targetName.includes('(') || candidateName.includes('('))
+  );
+};
+
+const hasEqualLengthVariantSimilarity = (target = '', candidate = '') => {
+  const targetName = normalizeLooseName(target);
+  const candidateName = normalizeLooseName(candidate);
+  if (!targetName || targetName.length !== candidateName.length) return false;
+
+  const matchingCharacters = [...targetName].filter((char, index) => char === candidateName[index]).length;
+  const similarity = matchingCharacters / targetName.length;
+
+  return (targetName.length >= 4 && similarity >= 0.8)
+    || (targetName.length >= 2 && targetName.length <= 3 && similarity >= 0.5);
+};
 
 const compareNameScore = (target = '', candidate = '', maxScore = 45) => {
   const targetName = normalizeTitle(target);
@@ -185,7 +252,11 @@ const compareNameScore = (target = '', candidate = '', maxScore = 45) => {
 
   if (targetName === candidateName) return maxScore;
   if (normalizeLooseName(target) === normalizeLooseName(candidate)) return Math.round(maxScore * 0.94);
+  if (hasEquivalentDecorationBoundary(target, candidate)) return Math.round(maxScore * 0.9);
+  if (stripBenignNameDecorations(target) === stripBenignNameDecorations(candidate)) return Math.round(maxScore * 0.9);
   if (removeNameDecorations(target) === removeNameDecorations(candidate)) return Math.round(maxScore * 0.9);
+  if (hasEqualLengthVariantSimilarity(target, candidate)) return Math.round(maxScore * 0.78);
+  if (hasBracketRootMatch(target, candidate)) return Math.round(maxScore * 0.58);
   if (candidateName.includes(targetName) || targetName.includes(candidateName)) return Math.round(maxScore * 0.64);
 
   const similarity = textSimilarityScore(candidate, target);
@@ -203,10 +274,10 @@ const durationScoreFor = (candidateDurationMs, targetDurationMs) => {
   if (delta <= 300) return 30;
   if (delta <= 700) return 26;
   if (delta <= 1500) return 22;
-  if (delta <= 3500) return 16;
-  if (delta <= DURATION_TOLERANCE_MS) return 8;
-  if (delta <= 15000) return -4;
-  return -24;
+  if (delta <= 3500) return 12;
+  if (delta <= 8000) return -8;
+  if (delta <= 15000) return -32;
+  return -72;
 };
 
 export const getCandidateDurationMs = (candidate = {}) => (
@@ -230,6 +301,20 @@ const expandNameFields = (...values) => uniqueValues(values.flatMap((value) => {
   return [String(value)];
 }));
 
+const expandArtistNameVariants = (...values) => uniqueValues(
+  expandNameFields(...values).flatMap((value) => {
+    const normalizedValue = String(value || '').trim();
+    if (!normalizedValue) return [];
+
+    const splitNames = normalizedValue
+      .split(COMPOSITE_ARTIST_SEPARATOR_PATTERN)
+      .map((artist) => artist.trim())
+      .filter(Boolean);
+
+    return [normalizedValue, ...splitNames];
+  })
+);
+
 const getCandidateNameVariants = (candidate = {}) => expandNameFields(
   candidate?.name,
   candidate?.alias,
@@ -248,7 +333,7 @@ const getCandidateAlbumNameVariants = (candidate = {}) => expandNameFields(
 
 const getCandidateArtistGroups = (candidate = {}) => (
   (candidate?.artists || [])
-    .map((artist) => expandNameFields(
+    .map((artist) => expandArtistNameVariants(
       artist?.name,
       artist?.alias,
       artist?.aliases,
@@ -275,17 +360,29 @@ const artistNamesMatch = (targetArtist, candidateArtist) => {
 const shouldSoftenCjkArtistMismatch = (candidate, track, context = {}) => (
   hasCjkText(candidate?.name, track?.name)
     && context.titleScore >= 42
-    && context.durationScore >= 16
+    && context.durationScore >= 12
 );
 
 const artistScoreFor = (candidate, track, context = {}) => {
-  const targetArtists = getTargetArtistNames(track).map(normalizeText).filter(Boolean);
+  const targetArtists = expandArtistNameVariants(getTargetArtistNames(track)).map(normalizeText).filter(Boolean);
   const candidateArtistGroups = getCandidateArtistGroups(candidate)
     .map((names) => names.map(normalizeText).filter(Boolean))
     .filter((names) => names.length);
   const candidateArtists = uniqueValues(candidateArtistGroups.flat());
   if (!targetArtists.length || !candidateArtists.length) {
     return { detail: 'Missing artist metadata', matchedTargets: [], score: 0 };
+  }
+
+  if (
+    targetArtists.length > 5
+      && candidateArtists[0]
+      && VARIOUS_ARTISTS_PATTERN.test(candidateArtists[0])
+  ) {
+    return {
+      detail: 'Compilation artist accepted for multi-artist track',
+      matchedTargets: [],
+      score: 44,
+    };
   }
 
   const matchedTargets = targetArtists.filter((targetArtist) => (
@@ -299,7 +396,7 @@ const artistScoreFor = (candidate, track, context = {}) => {
       return {
         detail: 'No direct artist match; accepted by CJK title and duration',
         matchedTargets: [],
-        score: -4,
+        score: 0,
       };
     }
 
@@ -309,13 +406,26 @@ const artistScoreFor = (candidate, track, context = {}) => {
   let score = 0;
   const primaryArtist = targetArtists[0];
   const primaryCandidateGroup = candidateArtistGroups[0] || [];
-  if (primaryCandidateGroup.some((candidateArtist) => artistNamesMatch(primaryArtist, candidateArtist))) {
+  const isExactArtistSet = matchedTargets.length === targetArtists.length
+    && candidateArtists.length === targetArtists.length;
+  const isNearlyCompleteArtistSet = matchedTargets.length + 1 >= targetArtists.length
+    && targetArtists.length >= 2;
+
+  if (isExactArtistSet) {
+    score += 38;
+  } else if (isNearlyCompleteArtistSet) {
     score += 32;
+  } else if (primaryCandidateGroup.some((candidateArtist) => artistNamesMatch(primaryArtist, candidateArtist))) {
+    score += 30;
   } else if (candidateArtists.some((candidateArtist) => artistNamesMatch(primaryArtist, candidateArtist))) {
     score += 20;
   }
 
-  score += Math.min(24, matchedTargets.length * 12);
+  if (targetArtists.length > 7 && matchedTargets.length / targetArtists.length > 0.66) {
+    score += 22;
+  } else {
+    score += Math.min(24, matchedTargets.length * 12);
+  }
   score += Math.round(textSimilarityScore(candidateArtists.join(' '), targetArtists.join(' ')) * 12);
   return {
     detail: `${matchedTargets.length}/${targetArtists.length} target artists matched`,
