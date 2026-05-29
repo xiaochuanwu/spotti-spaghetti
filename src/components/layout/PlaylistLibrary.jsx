@@ -13,13 +13,15 @@ export const PlaylistLibrary = ({
   playlistCount,
   playlists,
   searchQuery,
+  showHeader = true,
   selectedPlaylistIds,
   viewMode,
 }) => {
   const { t } = useI18n();
 
   return (
-    <section aria-labelledby="playlist-library-title" className="min-w-0">
+    <section aria-labelledby={showHeader ? 'playlist-library-title' : undefined} className="min-w-0">
+      {showHeader && (
       <div className="mb-5 border-b border-[#e5e5e7] pb-4 dark:border-[#333336]/70">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
@@ -47,6 +49,7 @@ export const PlaylistLibrary = ({
           </div>
         </div>
       </div>
+      )}
 
       <PlaylistsContainer
         playlists={playlists}

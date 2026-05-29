@@ -104,12 +104,18 @@ export const enrichTracksWithMetadata = (tracks, artistGenres, albumLabels) => (
 );
 
 export const mapPreviewTrackItem = (item) => {
-  if (!item?.track) return null;
-
-  const track = item.track;
+  const track = item?.track || item?.item || (
+    item &&
+    !Object.prototype.hasOwnProperty.call(item, 'track') &&
+    !Object.prototype.hasOwnProperty.call(item, 'item')
+      ? item
+      : null
+  );
+  if (!track || (track.type && track.type !== 'track')) return null;
 
   return {
     id: track.id,
+    uri: track.uri,
     name: track.name,
     artists: track.artists?.map(artist => artist.name).join(', ') || '',
     albumName: track.album?.name || '',

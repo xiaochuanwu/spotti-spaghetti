@@ -4,7 +4,7 @@ export const AppShell = ({ inspector, main, sidebar }) => (
       {sidebar}
     </aside>
 
-    <section className="order-3 min-w-0 lg:order-2 xl:order-2">
+    <section className="order-3 w-full min-w-0 max-w-full overflow-hidden lg:order-2 xl:order-2">
       {main}
     </section>
 

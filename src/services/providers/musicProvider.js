@@ -18,9 +18,14 @@ export const PROVIDER_ERROR_CODES = {
 };
 
 const CAPABILITY_METHODS = {
-  nowPlaying: 'getNowPlaying',
-  playbackControl: 'controlPlayback',
-  playbackState: 'getPlaybackState',
+  nowPlaying: ['getNowPlaying'],
+  playbackControl: ['controlPlayback'],
+  playbackState: ['getPlaybackState'],
+  trackLibrary: ['getSavedTrackIds', 'saveTracks', 'removeSavedTracks'],
+  contextualPlayback: ['playTrack', 'playContext'],
+  playbackQueue: ['getPlaybackQueue', 'getRecentlyPlayed'],
+  personalization: ['getTopTracks'],
+  catalogPlaylists: ['getPlaylistById'],
 };
 
 export const createProviderError = (code, details = {}) => (
@@ -33,7 +38,7 @@ export const assertMusicProvider = (provider) => {
   ));
   const missingCapabilityMethods = Object.entries(provider?.capabilities || {})
     .filter(([, enabled]) => enabled)
-    .map(([capability]) => CAPABILITY_METHODS[capability])
+    .flatMap(([capability]) => CAPABILITY_METHODS[capability] || [])
     .filter(method => method && typeof provider?.[method] !== 'function');
 
   const allMissingMethods = [...missingMethods, ...missingCapabilityMethods];

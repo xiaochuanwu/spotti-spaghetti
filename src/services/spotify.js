@@ -14,14 +14,70 @@ import {
 
 const MAX_RATE_LIMIT_RETRIES = 4;
 const MAX_CONCURRENT_REQUESTS = 3;
-const authStorage = sessionStorage;
 const likedSongsCover = new URL('../assets/images/liked_songs.png', import.meta.url).href;
+const ACCESS_TOKEN_REFRESH_SKEW_MS = 30_000;
 
 const createSpotifyError = (code, details = {}) => Object.assign(new Error(code), { code, details });
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 let activeRequests = 0;
+let activeTokenRefresh = null;
 const requestQueue = [];
+
+const getBrowserStorage = (storageKey) => {
+  try {
+    return globalThis[storageKey] || null;
+  } catch {
+    return null;
+  }
+};
+
+const createSafeStorage = (storage) => ({
+  getItem(key) {
+    try {
+      return storage?.getItem(key) ?? null;
+    } catch {
+      return null;
+    }
+  },
+  setItem(key, value) {
+    try {
+      storage?.setItem(key, value);
+    } catch {
+      // Ignore blocked browser storage; API calls will fail auth-safe later.
+    }
+  },
+  removeItem(key) {
+    try {
+      storage?.removeItem(key);
+    } catch {
+      // Ignore blocked browser storage; API calls will fail auth-safe later.
+    }
+  },
+});
+
+const primaryAuthStorageSource = getBrowserStorage('localStorage') || getBrowserStorage('sessionStorage');
+const legacySessionAuthStorageSource = getBrowserStorage('sessionStorage');
+const primaryAuthStorage = createSafeStorage(primaryAuthStorageSource);
+const legacySessionAuthStorage = createSafeStorage(
+  legacySessionAuthStorageSource && legacySessionAuthStorageSource !== primaryAuthStorageSource
+    ? legacySessionAuthStorageSource
+    : null
+);
+
+const authStorage = {
+  getItem(key) {
+    return primaryAuthStorage.getItem(key) ?? legacySessionAuthStorage.getItem(key);
+  },
+  setItem(key, value) {
+    primaryAuthStorage.setItem(key, value);
+    legacySessionAuthStorage.removeItem(key);
+  },
+  removeItem(key) {
+    primaryAuthStorage.removeItem(key);
+    legacySessionAuthStorage.removeItem(key);
+  },
+};
 
 const drainRequestQueue = () => {
   while (activeRequests < MAX_CONCURRENT_REQUESTS && requestQueue.length > 0) {
@@ -173,10 +229,92 @@ const normalizeSpotifyPlayback = (response, fetchedAt, unavailableReason = 'no_a
   };
 };
 
+const mapPlayerTrackItem = (track, extras = {}) => {
+  if (!track || (track.type && track.type !== 'track')) return null;
+
+  const normalizedTrack = normalizeTrack({
+    provider: MUSIC_PROVIDERS.spotify,
+    providerTrackId: track.id,
+    uri: track.uri,
+    isrc: track.external_ids?.isrc || '',
+    name: track.name,
+    artists: track.artists?.map(artist => artist?.name).filter(Boolean) || [],
+    album: {
+      providerAlbumId: track.album?.id,
+      name: track.album?.name,
+    },
+    releaseDate: track.album?.release_date,
+    durationMs: track.duration_ms,
+    popularity: track.popularity,
+    explicit: track.explicit,
+    rawSource: track,
+  });
+
+  return {
+    ...extras,
+    id: track.id || '',
+    uri: track.uri || '',
+    type: 'track',
+    track: normalizedTrack,
+    albumCover: track.album?.images?.[0]?.url || '',
+    durationMs: track.duration_ms ?? normalizedTrack.durationMs,
+    externalUrl: track.external_urls?.spotify || '',
+  };
+};
+
 const withDeviceQuery = (url, deviceId = '') => {
   if (!deviceId) return url;
   const params = new URLSearchParams({ device_id: deviceId });
   return `${url}?${params.toString()}`;
+};
+
+const SPOTIFY_TRACK_URI_PREFIX = 'spotify:track:';
+
+const normalizeSpotifyTrackId = (trackRef = '') => {
+  if (!trackRef) return '';
+
+  const value = typeof trackRef === 'object'
+    ? trackRef.providerTrackId || trackRef.id || trackRef.uri || trackRef.rawSource?.id || ''
+    : trackRef;
+  const text = String(value).trim();
+  if (!text) return '';
+
+  if (text.startsWith(SPOTIFY_TRACK_URI_PREFIX)) {
+    return text.slice(SPOTIFY_TRACK_URI_PREFIX.length);
+  }
+
+  const spotifyUrlMatch = text.match(/open\.spotify\.com\/track\/([^?]+)/);
+  if (spotifyUrlMatch) {
+    return decodeURIComponent(spotifyUrlMatch[1]);
+  }
+
+  return text;
+};
+
+const normalizeSpotifyTrackIds = (trackRefs = []) => (
+  Array.from(new Set(trackRefs.map(normalizeSpotifyTrackId).filter(Boolean)))
+);
+
+const normalizeSpotifyTrackUri = (trackRef = '') => {
+  const id = normalizeSpotifyTrackId(trackRef);
+  return id ? `${SPOTIFY_TRACK_URI_PREFIX}${id}` : '';
+};
+
+const normalizeOptionalPositionMs = (positionMs) => {
+  if (positionMs === undefined || positionMs === null || positionMs === '') return null;
+
+  const numericPositionMs = Number(positionMs);
+  return Number.isFinite(numericPositionMs)
+    ? Math.max(0, Math.round(numericPositionMs))
+    : null;
+};
+
+const addOptionalPositionMs = (body, positionMs) => {
+  const normalizedPositionMs = normalizeOptionalPositionMs(positionMs);
+  if (normalizedPositionMs !== null) {
+    body.position_ms = normalizedPositionMs;
+  }
+  return body;
 };
 
 const getPlaybackControlRequest = (command, payload = {}) => {
@@ -249,6 +387,24 @@ const getTokenExpiryMs = (tokenData = {}) => {
   return SPOTIFY_CONFIG.tokenExpiry;
 };
 
+const parseScopeSet = (scopeText = '') => (
+  new Set(String(scopeText).split(/\s+/).map(scope => scope.trim()).filter(Boolean))
+);
+
+const hasRequiredScopes = () => {
+  const grantedScopes = parseScopeSet(authStorage.getItem(STORAGE_KEYS.accessTokenScopes));
+  const requiredScopes = parseScopeSet(SPOTIFY_CONFIG.scopes);
+  if (grantedScopes.size === 0) return false;
+
+  return Array.from(requiredScopes).every(scope => grantedScopes.has(scope));
+};
+
+const throwIfScopesChanged = () => {
+  if (!hasRequiredScopes()) {
+    throw createSpotifyError('SPOTIFY_AUTH_SCOPE_CHANGED');
+  }
+};
+
 const getStoredAccessTokenExpiresAt = () => {
   const expiresAt = parseStoredNumber(authStorage.getItem(STORAGE_KEYS.accessTokenExpiresAt));
   if (expiresAt > 0) return expiresAt;
@@ -262,6 +418,26 @@ const getStoredAccessTokenExpiresAt = () => {
   }
 
   return 0;
+};
+
+const storeSpotifyTokenData = (tokenData = {}, { scopeFallback = '' } = {}) => {
+  if (!tokenData.access_token) return false;
+
+  const expiresAt = Date.now() + getTokenExpiryMs(tokenData);
+  authStorage.setItem(STORAGE_KEYS.accessToken, tokenData.access_token);
+  authStorage.setItem(STORAGE_KEYS.accessTokenExpiresAt, String(expiresAt));
+  authStorage.removeItem(STORAGE_KEYS.accessTokenTimestamp);
+
+  const scopes = tokenData.scope || authStorage.getItem(STORAGE_KEYS.accessTokenScopes) || scopeFallback;
+  if (scopes) {
+    authStorage.setItem(STORAGE_KEYS.accessTokenScopes, scopes);
+  }
+
+  if (tokenData.refresh_token) {
+    authStorage.setItem(STORAGE_KEYS.refreshToken, tokenData.refresh_token);
+  }
+
+  return true;
 };
 
 export const spotify = {
@@ -324,11 +500,7 @@ export const spotify = {
 
       if (response.ok) {
         const tokenData = await response.json();
-        if (tokenData.access_token) {
-          const expiresAt = Date.now() + getTokenExpiryMs(tokenData);
-          authStorage.setItem(STORAGE_KEYS.accessToken, tokenData.access_token);
-          authStorage.setItem(STORAGE_KEYS.accessTokenExpiresAt, String(expiresAt));
-          authStorage.removeItem(STORAGE_KEYS.accessTokenTimestamp);
+        if (storeSpotifyTokenData(tokenData, { scopeFallback: SPOTIFY_CONFIG.scopes })) {
           authStorage.removeItem(STORAGE_KEYS.codeVerifier);
           authStorage.removeItem(STORAGE_KEYS.oauthState);
           return true;
@@ -350,15 +522,24 @@ export const spotify = {
   // Check if session is valid based on Spotify's expires_in value.
   isLoggedIn() {
     const token = authStorage.getItem(STORAGE_KEYS.accessToken);
+    const refreshToken = authStorage.getItem(STORAGE_KEYS.refreshToken);
+    if ((token || refreshToken) && !hasRequiredScopes()) {
+      this.clearAuth();
+      return false;
+    }
+    if (!token && refreshToken) return true;
     if (!token) return false;
 
     const expiresAt = getStoredAccessTokenExpiresAt();
+    if (expiresAt && Date.now() < expiresAt) return true;
+    if (refreshToken) return true;
+
     if (!expiresAt || Date.now() >= expiresAt) {
       this.clearAuth();
       return false;
     }
 
-    return true;
+    return false;
   },
 
   // Logout
@@ -370,9 +551,79 @@ export const spotify = {
   clearAuth() {
     authStorage.removeItem(STORAGE_KEYS.accessToken);
     authStorage.removeItem(STORAGE_KEYS.accessTokenExpiresAt);
+    authStorage.removeItem(STORAGE_KEYS.accessTokenScopes);
+    authStorage.removeItem(STORAGE_KEYS.refreshToken);
     authStorage.removeItem(STORAGE_KEYS.accessTokenTimestamp);
     authStorage.removeItem(STORAGE_KEYS.codeVerifier);
     authStorage.removeItem(STORAGE_KEYS.oauthState);
+  },
+
+  async refreshAccessToken() {
+    if (activeTokenRefresh) return activeTokenRefresh;
+
+    activeTokenRefresh = (async () => {
+      const refreshToken = authStorage.getItem(STORAGE_KEYS.refreshToken);
+      if (!refreshToken) {
+        this.clearAuth();
+        throw createSpotifyError('SPOTIFY_AUTH_EXPIRED');
+      }
+
+      const clientId = getSpotifyClientId();
+      const response = await fetch('https://accounts.spotify.com/api/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId,
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+        }),
+      });
+
+      if (response.ok) {
+        const tokenData = await response.json();
+        if (storeSpotifyTokenData({
+          ...tokenData,
+          refresh_token: tokenData.refresh_token || refreshToken,
+        })) {
+          return tokenData.access_token;
+        }
+      }
+
+      const payload = await readResponseBody(response);
+      this.clearAuth();
+      throw createSpotifyError('SPOTIFY_AUTH_REFRESH_FAILED', {
+        status: response.status,
+        statusText: response.statusText,
+        payload,
+      });
+    })().finally(() => {
+      activeTokenRefresh = null;
+    });
+
+    return activeTokenRefresh;
+  },
+
+  async getValidAccessToken() {
+    try {
+      throwIfScopesChanged();
+    } catch (error) {
+      this.clearAuth();
+      throw error;
+    }
+
+    const token = authStorage.getItem(STORAGE_KEYS.accessToken);
+    const expiresAt = getStoredAccessTokenExpiresAt();
+    if (token && expiresAt && Date.now() < expiresAt - ACCESS_TOKEN_REFRESH_SKEW_MS) {
+      return token;
+    }
+
+    const refreshToken = authStorage.getItem(STORAGE_KEYS.refreshToken);
+    if (refreshToken) {
+      return this.refreshAccessToken();
+    }
+
+    this.clearAuth();
+    throw createSpotifyError('SPOTIFY_AUTH_EXPIRED');
   },
 
   // Base API calling helper
@@ -388,10 +639,7 @@ export const spotify = {
     }
 
     try {
-      const token = authStorage.getItem(STORAGE_KEYS.accessToken);
-      if (!token || !this.isLoggedIn()) {
-        throw createSpotifyError('SPOTIFY_AUTH_EXPIRED');
-      }
+      const token = await this.getValidAccessToken();
 
       const response = await fetch(url, {
         method: options.method || 'GET',
@@ -409,6 +657,14 @@ export const spotify = {
       }
 
       if (response.status === 401) {
+        if (!options.skipAuthRefresh && authStorage.getItem(STORAGE_KEYS.refreshToken)) {
+          await this.refreshAccessToken();
+          return this.apiRequest(url, 0, onRateLimit, retryCount, {
+            ...options,
+            skipAuthRefresh: true,
+          });
+        }
+
         this.clearAuth();
         throw createSpotifyError('SPOTIFY_AUTH_EXPIRED', { status: response.status });
       }
@@ -427,7 +683,26 @@ export const spotify = {
       }
 
       const payload = await readResponseBody(response);
+      if (response.status === 404 && payload?.error?.reason === 'NO_ACTIVE_DEVICE') {
+        throw createSpotifyError('SPOTIFY_NO_ACTIVE_DEVICE', {
+          status: response.status,
+          statusText: response.statusText,
+          payload,
+        });
+      }
+
       if (response.status === 403) {
+        if (
+          payload?.error?.reason === 'PREMIUM_REQUIRED' ||
+          /premium required/i.test(payload?.error?.message || '')
+        ) {
+          throw createSpotifyError('SPOTIFY_PREMIUM_REQUIRED', {
+            status: response.status,
+            statusText: response.statusText,
+            payload,
+          });
+        }
+
         throw createSpotifyError('SPOTIFY_PERMISSION_DENIED', {
           status: response.status,
           statusText: response.statusText,
@@ -488,7 +763,7 @@ export const spotify = {
     return playlist;
   },
 
-  async searchTracks(query, { limit = 10, offset = 0, market = '' } = {}) {
+  async searchTracks(query, { limit = 10, offset = 0, market = '', signal } = {}) {
     const params = new URLSearchParams({
       type: 'track',
       q: query,
@@ -497,8 +772,63 @@ export const spotify = {
     });
     if (market) params.set('market', market);
 
-    const response = await this.apiCall(`https://api.spotify.com/v1/search?${params.toString()}`);
+    const response = await this.apiCall(
+      `https://api.spotify.com/v1/search?${params.toString()}`,
+      0,
+      null,
+      0,
+      { signal }
+    );
     return response?.tracks?.items || [];
+  },
+
+  async getTopTracks({ limit = 20, offset = 0, timeRange = 'short_term', signal } = {}) {
+    const params = new URLSearchParams({
+      limit: String(Math.min(50, Math.max(1, Number(limit) || 20))),
+      offset: String(Math.max(0, Number(offset) || 0)),
+      time_range: timeRange,
+    });
+
+    const response = await this.apiCall(
+      `https://api.spotify.com/v1/me/top/tracks?${params.toString()}`,
+      0,
+      null,
+      0,
+      { signal }
+    );
+
+    return {
+      items: (response?.items || []).map(item => mapPlayerTrackItem(item)).filter(Boolean),
+      total: response?.total || 0,
+    };
+  },
+
+  async getPlaylistById(playlistId, { market = '', signal } = {}) {
+    const id = String(playlistId || '').trim();
+    if (!id) throw createSpotifyError('SPOTIFY_PLAYLISTS_UNAVAILABLE');
+
+    const params = new URLSearchParams({
+      fields: 'id,name,uri,external_urls,images,owner(id,display_name),tracks(total,href)',
+    });
+    if (market) params.set('market', market);
+
+    const response = await this.apiCall(
+      `https://api.spotify.com/v1/playlists/${encodeURIComponent(id)}?${params.toString()}`,
+      0,
+      null,
+      0,
+      { signal }
+    );
+
+    return {
+      id: response?.id || id,
+      name: response?.name || '',
+      uri: response?.uri || `spotify:playlist:${id}`,
+      external_urls: response?.external_urls || {},
+      images: response?.images || [],
+      owner: response?.owner || null,
+      tracks: response?.tracks || { total: 0, href: `https://api.spotify.com/v1/playlists/${id}/tracks` },
+    };
   },
 
   async getNowPlaying(options = {}) {
@@ -529,6 +859,48 @@ export const spotify = {
     return normalizeSpotifyPlayback(response, fetchedAt, 'no_active_device');
   },
 
+  async getPlaybackQueue(options = {}) {
+    const response = await this.apiCall(
+      'https://api.spotify.com/v1/me/player/queue',
+      0,
+      null,
+      0,
+      options
+    );
+
+    return {
+      currentlyPlaying: mapPlayerTrackItem(response?.currently_playing),
+      queue: (response?.queue || []).map(item => mapPlayerTrackItem(item)).filter(Boolean),
+    };
+  },
+
+  async getRecentlyPlayed({ limit = 20, after = '', before = '', signal } = {}) {
+    const params = new URLSearchParams({
+      limit: String(Math.min(50, Math.max(1, Number(limit) || 20))),
+    });
+    if (after) params.set('after', String(after));
+    if (before) params.set('before', String(before));
+
+    const response = await this.apiCall(
+      `https://api.spotify.com/v1/me/player/recently-played?${params.toString()}`,
+      0,
+      null,
+      0,
+      { signal }
+    );
+
+    return {
+      cursors: response?.cursors || null,
+      items: (response?.items || [])
+        .map(item => mapPlayerTrackItem(item?.track, {
+          context: item?.context || null,
+          playedAt: item?.played_at || '',
+        }))
+        .filter(Boolean),
+      next: response?.next || '',
+    };
+  },
+
   async controlPlayback(command, payload = {}, options = {}) {
     const request = getPlaybackControlRequest(command, payload);
 
@@ -536,6 +908,104 @@ export const spotify = {
       method: request.method,
       signal: options.signal,
     });
+  },
+
+  async getSavedTrackIds(trackRefs = [], options = {}) {
+    const ids = normalizeSpotifyTrackIds(trackRefs);
+    if (ids.length === 0) return [];
+
+    const savedIds = [];
+    const chunks = chunkArray(ids, 50);
+
+    for (const chunk of chunks) {
+      const contains = await this.apiCall(
+        `https://api.spotify.com/v1/me/tracks/contains?ids=${chunk.join(',')}`,
+        0,
+        null,
+        0,
+        options
+      );
+
+      chunk.forEach((id, index) => {
+        if (contains?.[index]) {
+          savedIds.push(id);
+        }
+      });
+    }
+
+    return savedIds;
+  },
+
+  async saveTracks(trackRefs = [], options = {}) {
+    const ids = normalizeSpotifyTrackIds(trackRefs);
+    const chunks = chunkArray(ids, 50);
+
+    for (const chunk of chunks) {
+      await this.apiCall('https://api.spotify.com/v1/me/tracks', 0, null, 0, {
+        method: 'PUT',
+        body: JSON.stringify({ ids: chunk }),
+        signal: options.signal,
+      });
+    }
+  },
+
+  async removeSavedTracks(trackRefs = [], options = {}) {
+    const ids = normalizeSpotifyTrackIds(trackRefs);
+    const chunks = chunkArray(ids, 50);
+
+    for (const chunk of chunks) {
+      await this.apiCall('https://api.spotify.com/v1/me/tracks', 0, null, 0, {
+        method: 'DELETE',
+        body: JSON.stringify({ ids: chunk }),
+        signal: options.signal,
+      });
+    }
+  },
+
+  async playTrack(trackRef, playbackOptions = {}, options = {}) {
+    const uri = normalizeSpotifyTrackUri(trackRef);
+    if (!uri) throw createSpotifyError('SPOTIFY_PLAYBACK_TARGET_REQUIRED');
+
+    const body = addOptionalPositionMs({ uris: [uri] }, playbackOptions.positionMs);
+
+    return this.apiCall(
+      withDeviceQuery('https://api.spotify.com/v1/me/player/play', playbackOptions.deviceId || ''),
+      0,
+      null,
+      0,
+      {
+        method: 'PUT',
+        body: JSON.stringify(body),
+        signal: options.signal,
+      }
+    );
+  },
+
+  async playContext(contextUri, playbackOptions = {}, options = {}) {
+    const normalizedContextUri = String(contextUri || '').trim();
+    if (!normalizedContextUri) throw createSpotifyError('SPOTIFY_PLAYBACK_TARGET_REQUIRED');
+
+    const body = addOptionalPositionMs({ context_uri: normalizedContextUri }, playbackOptions.positionMs);
+    if (playbackOptions.offsetUri) {
+      const offsetUri = normalizeSpotifyTrackUri(playbackOptions.offsetUri);
+      if (offsetUri) {
+        body.offset = { uri: offsetUri };
+      }
+    } else if (Number.isFinite(Number(playbackOptions.offsetPosition))) {
+      body.offset = { position: Math.max(0, Math.round(Number(playbackOptions.offsetPosition))) };
+    }
+
+    return this.apiCall(
+      withDeviceQuery('https://api.spotify.com/v1/me/player/play', playbackOptions.deviceId || ''),
+      0,
+      null,
+      0,
+      {
+        method: 'PUT',
+        body: JSON.stringify(body),
+        signal: options.signal,
+      }
+    );
   },
 
   // Fetch all playlists (including the saved-tracks virtual playlist)
@@ -662,7 +1132,13 @@ export const spotify = {
 
   // Fetch a preview page of tracks for modal display
   async getPlaylistTracksPreview(playlist, offset = 0, limit = 50, options = {}) {
-    const url = `${playlist.tracks.href}?offset=${offset}&limit=${limit}`;
+    const params = new URLSearchParams({
+      offset: String(offset),
+      limit: String(limit),
+    });
+    if (options.market) params.set('market', options.market);
+
+    const url = `${playlist.tracks.href}?${params.toString()}`;
     const res = await this.apiCall(url, 0, null, 0, options);
     if (!res || !res.items) {
       return { tracks: [], total: playlist.tracks?.total || 0, nextOffset: offset, hasMore: false };

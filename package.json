@@ -2,7 +2,7 @@
   "name": "spotti-spaghetti",
   "private": true,
   "version": "0.0.0",
-  "description": "A Spotify playlist backup, restore, history, and taste-analysis workbench.",
+  "description": "A Spotify listening, lyrics, queue, Liked Songs, and playlist management workbench.",
   "type": "module",
   "scripts": {
     "dev": "vite",

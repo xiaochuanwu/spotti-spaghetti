@@ -65,6 +65,75 @@ test('assertMusicProvider requires controlPlayback when playbackControl capabili
   assert.equal(assertMusicProvider(provider), provider);
 });
 
+test('assertMusicProvider requires saved-track methods when trackLibrary capability is enabled', () => {
+  assert.throws(
+    () => assertMusicProvider(createProvider({ capabilities: { trackLibrary: true } })),
+    /Invalid music provider: getSavedTrackIds, saveTracks, removeSavedTracks/
+  );
+
+  const provider = createProvider({
+    capabilities: { trackLibrary: true },
+    getSavedTrackIds: () => null,
+    saveTracks: () => null,
+    removeSavedTracks: () => null,
+  });
+  assert.equal(assertMusicProvider(provider), provider);
+});
+
+test('assertMusicProvider requires target playback methods when contextualPlayback capability is enabled', () => {
+  assert.throws(
+    () => assertMusicProvider(createProvider({ capabilities: { contextualPlayback: true } })),
+    /Invalid music provider: playTrack, playContext/
+  );
+
+  const provider = createProvider({
+    capabilities: { contextualPlayback: true },
+    playTrack: () => null,
+    playContext: () => null,
+  });
+  assert.equal(assertMusicProvider(provider), provider);
+});
+
+test('assertMusicProvider requires queue methods when playbackQueue capability is enabled', () => {
+  assert.throws(
+    () => assertMusicProvider(createProvider({ capabilities: { playbackQueue: true } })),
+    /Invalid music provider: getPlaybackQueue, getRecentlyPlayed/
+  );
+
+  const provider = createProvider({
+    capabilities: { playbackQueue: true },
+    getPlaybackQueue: () => null,
+    getRecentlyPlayed: () => null,
+  });
+  assert.equal(assertMusicProvider(provider), provider);
+});
+
+test('assertMusicProvider requires personalization methods when personalization capability is enabled', () => {
+  assert.throws(
+    () => assertMusicProvider(createProvider({ capabilities: { personalization: true } })),
+    /Invalid music provider: getTopTracks/
+  );
+
+  const provider = createProvider({
+    capabilities: { personalization: true },
+    getTopTracks: () => null,
+  });
+  assert.equal(assertMusicProvider(provider), provider);
+});
+
+test('assertMusicProvider requires playlist lookup methods when catalogPlaylists capability is enabled', () => {
+  assert.throws(
+    () => assertMusicProvider(createProvider({ capabilities: { catalogPlaylists: true } })),
+    /Invalid music provider: getPlaylistById/
+  );
+
+  const provider = createProvider({
+    capabilities: { catalogPlaylists: true },
+    getPlaylistById: () => null,
+  });
+  assert.equal(assertMusicProvider(provider), provider);
+});
+
 test('provider registry returns the registered Spotify provider', async () => {
   globalThis.sessionStorage = globalThis.sessionStorage || {
     getItem: () => null,
@@ -91,9 +160,27 @@ test('provider registry returns the registered Spotify provider', async () => {
   assert.equal(provider.capabilities.nowPlaying, true);
   assert.equal(provider.capabilities.playbackControl, true);
   assert.equal(provider.capabilities.playbackState, true);
+  assert.equal(provider.capabilities.trackLibrary, true);
+  assert.equal(provider.capabilities.contextualPlayback, true);
+  assert.equal(provider.capabilities.playbackQueue, true);
+  assert.equal(provider.capabilities.personalization, true);
+  assert.equal(provider.capabilities.catalogPlaylists, true);
   assert.equal(typeof provider.controlPlayback, 'function');
   assert.equal(typeof provider.getNowPlaying, 'function');
   assert.equal(typeof provider.getPlaybackState, 'function');
+  assert.equal(typeof provider.getSavedTrackIds, 'function');
+  assert.equal(typeof provider.saveTracks, 'function');
+  assert.equal(typeof provider.removeSavedTracks, 'function');
+  assert.equal(typeof provider.playTrack, 'function');
+  assert.equal(typeof provider.playContext, 'function');
+  assert.equal(typeof provider.getPlaybackQueue, 'function');
+  assert.equal(typeof provider.getRecentlyPlayed, 'function');
+  assert.equal(typeof provider.getTopTracks, 'function');
+  assert.equal(typeof provider.getPlaylistById, 'function');
+  assert.equal(
+    provider.getErrorInfo({ code: 'SPOTIFY_PLAYBACK_TARGET_REQUIRED' }).translationKey,
+    'error.spotifyPlaybackTargetRequired'
+  );
   assert.equal(provider, getMusicProvider('spotify'));
   assert.throws(() => getMusicProvider('apple_music'), /Unknown music provider: apple_music/);
 });

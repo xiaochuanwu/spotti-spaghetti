@@ -37,7 +37,7 @@ export const useNowPlaying = ({
   const isSupported = Boolean(enabled && readPlaybackState);
 
   const fetchNowPlaying = useCallback(async ({ silent = false } = {}) => {
-    if (!isSupported) return;
+    if (!isSupported) return null;
 
     abortRef.current?.abort();
     const abortController = new AbortController();
@@ -55,9 +55,10 @@ export const useNowPlaying = ({
       setDisplayNowMs(Date.now());
       setControlError('');
       setError('');
+      return result;
     } catch (err) {
       const errorInfo = provider.getErrorInfo?.(err);
-      if (errorInfo?.isCancelled) return;
+      if (errorInfo?.isCancelled) return null;
 
       if (errorInfo?.isAuthExpired) {
         onAuthExpired?.(err);
@@ -67,6 +68,7 @@ export const useNowPlaying = ({
       if (!silent || !lastNowPlayingRef.current) {
         setError(formatError?.(err) || t('nowPlaying.error'));
       }
+      return null;
     } finally {
       if (abortRef.current === abortController) {
         abortRef.current = null;

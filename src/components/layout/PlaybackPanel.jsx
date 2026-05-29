@@ -1,12 +1,18 @@
 import { NowPlayingPanel } from '../NowPlayingPanel.jsx';
 
-export const PlaybackPanel = ({ playback }) => {
-  return (
-    <section className="min-w-0">
-      <NowPlayingPanel
-        playback={playback}
-        variant="player"
-      />
-    </section>
-  );
-};
+export const PlaybackPanel = ({
+  playback,
+  playbackActions,
+  playbackQueue,
+  trackLibrary,
+}) => (
+  <section className="min-w-0 lg:min-h-[664px]">
+    <NowPlayingPanel
+      playback={playback}
+      playbackActions={playbackActions}
+      playbackQueue={playbackQueue}
+      trackLibrary={trackLibrary}
+      variant="player"
+    />
+  </section>
+);

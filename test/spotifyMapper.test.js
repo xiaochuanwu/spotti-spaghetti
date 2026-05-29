@@ -122,6 +122,7 @@ test('enrichTracksWithMetadata maps genres and record labels back to CSV fields'
 test('mapPreviewTrackItem creates compact modal data', () => {
   assert.deepEqual(mapPreviewTrackItem(spotifyTrackItem), {
     id: 'track-1',
+    uri: 'spotify:track:1',
     name: 'Test Track',
     artists: 'Artist One, Artist Two',
     albumName: 'Test Album',
@@ -131,6 +132,34 @@ test('mapPreviewTrackItem creates compact modal data', () => {
   });
 
   assert.equal(mapPreviewTrackItem({ track: null }), null);
+});
+
+test('mapPreviewTrackItem accepts playlist item payloads that use item', () => {
+  assert.deepEqual(mapPreviewTrackItem({
+    item: spotifyTrackItem.track,
+  }), {
+    id: 'track-1',
+    uri: 'spotify:track:1',
+    name: 'Test Track',
+    artists: 'Artist One, Artist Two',
+    albumName: 'Test Album',
+    albumCover: 'small.jpg',
+    durationMs: 215000,
+    externalUrl: 'https://open.spotify.com/track/1',
+  });
+});
+
+test('mapPreviewTrackItem accepts direct Spotify track payloads from search-like responses', () => {
+  assert.deepEqual(mapPreviewTrackItem(spotifyTrackItem.track), {
+    id: 'track-1',
+    uri: 'spotify:track:1',
+    name: 'Test Track',
+    artists: 'Artist One, Artist Two',
+    albumName: 'Test Album',
+    albumCover: 'small.jpg',
+    durationMs: 215000,
+    externalUrl: 'https://open.spotify.com/track/1',
+  });
 });
 
 test('mapPreviewTrackItem leaves display fallbacks to the UI layer', () => {
@@ -145,6 +174,7 @@ test('mapPreviewTrackItem leaves display fallbacks to the UI layer', () => {
     },
   }), {
     id: 'track-2',
+    uri: undefined,
     name: 'Sparse Track',
     artists: '',
     albumName: '',

@@ -1,5 +1,8 @@
 import {
+  Clock3,
   ExternalLink,
+  Heart,
+  ListOrdered,
   Loader2,
   Music,
   Pause,
@@ -9,6 +12,7 @@ import {
   Repeat,
   Repeat1,
   Repeat2,
+  RefreshCw,
   Shuffle,
   SkipBack,
   SkipForward,
@@ -20,6 +24,16 @@ const formatDuration = (ms) => {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = String(totalSeconds % 60).padStart(2, '0');
   return `${minutes}:${seconds}`;
+};
+
+const SPOTIFY_TRACK_URI_PREFIX = 'spotify:track:';
+
+const getPlayableTrackId = (item = {}) => {
+  const value = item.track?.providerTrackId || item.providerTrackId || item.id || item.uri || '';
+  const text = String(value).trim();
+  return text.startsWith(SPOTIFY_TRACK_URI_PREFIX)
+    ? text.slice(SPOTIFY_TRACK_URI_PREFIX.length)
+    : text;
 };
 
 const progressPercentFor = (progressMs, durationMs) => {
@@ -57,9 +71,9 @@ const RepeatModeIcon = ({ state, size = 15 }) => {
   return <Repeat size={size} aria-hidden="true" />;
 };
 
-const NowPlayingArtwork = ({ albumCover, trackName, t, variant }) => {
+const NowPlayingArtwork = ({ albumCover, condensed = false, trackName, t, variant }) => {
   const artworkClass = {
-    player: 'mx-auto flex aspect-square w-full max-w-[224px] items-center justify-center overflow-hidden rounded-xl border border-black/[0.04] bg-[#f0f0f2] shadow-sm dark:border-white/[0.04] dark:bg-[#161617] dark:shadow-none',
+    player: `mx-auto flex aspect-square w-full ${condensed ? 'max-w-[132px]' : 'max-w-[224px]'} items-center justify-center overflow-hidden rounded-xl border border-black/[0.04] bg-[#f0f0f2] shadow-sm transition-[max-width,transform] duration-300 dark:border-white/[0.04] dark:bg-[#161617] dark:shadow-none`,
     compact: 'flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-black/[0.04] bg-[#f0f0f2] dark:border-white/[0.04] dark:bg-[#161617]',
     default: 'flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-xl border border-black/[0.04] bg-[#f0f0f2] dark:border-white/[0.04] dark:bg-[#161617]',
   }[variant];
@@ -240,8 +254,8 @@ const SpotifyLink = ({ href, t, trackName, variant }) => {
   if (!href) return null;
 
   const className = variant === 'default'
-    ? 'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#e8e8ed] text-[#0071e3] transition-colors hover:bg-[#0071e3] hover:text-white dark:bg-[#2d2d30]'
-    : `${variant === 'compact' ? 'h-8 w-8' : 'h-9 w-9'} inline-flex shrink-0 items-center justify-center rounded-lg bg-[#e8e8ed] text-[#0071e3] transition-colors hover:bg-[#0071e3] hover:text-white dark:bg-[#2d2d30]`;
+    ? 'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#e8e8ed] text-[#0071e3] transition-colors hover:bg-[#0071e3] hover:text-white dark:bg-[#2d2d30] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]/40'
+    : `${variant === 'compact' ? 'h-8 w-8' : 'h-9 w-9'} inline-flex shrink-0 items-center justify-center rounded-lg bg-[#e8e8ed] text-[#0071e3] transition-colors hover:bg-[#0071e3] hover:text-white dark:bg-[#2d2d30] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]/40`;
 
   return (
     <a
@@ -249,10 +263,223 @@ const SpotifyLink = ({ href, t, trackName, variant }) => {
       target="_blank"
       rel="noopener noreferrer"
       aria-label={t('nowPlaying.openSpotify', trackName)}
+      title={t('nowPlaying.openSpotify', trackName)}
       className={className}
     >
       <ExternalLink size={variant === 'compact' ? 14 : 16} aria-hidden="true" />
     </a>
+  );
+};
+
+const SavedTrackButton = ({ t, track, trackLibrary, variant }) => {
+  if (!trackLibrary?.canSaveTracks) return null;
+
+  const isSaved = Boolean(trackLibrary.isSaved);
+  const isSaving = Boolean(trackLibrary.isSaving);
+  const label = isSaved
+    ? t('nowPlaying.removeSavedTrack', track.name)
+    : t('nowPlaying.saveTrack', track.name);
+  const sizeClass = variant === 'compact' ? 'h-8 w-8' : 'h-9 w-9';
+  const shapeClass = variant === 'default' ? 'rounded-full' : 'rounded-lg';
+  const toneClass = isSaved
+    ? 'text-[#ff3b30] hover:bg-[#ff3b30]/10 dark:hover:bg-[#ff3b30]/20'
+    : 'text-[#86868b] hover:text-[#ff3b30] hover:bg-[#ff3b30]/10 dark:hover:bg-[#ff3b30]/20';
+
+  return (
+    <button
+      type="button"
+      onClick={() => trackLibrary.onToggleSaved?.(track)}
+      disabled={isSaving}
+      aria-label={label}
+      aria-pressed={isSaved}
+      title={label}
+      className={`${sizeClass} ${shapeClass} inline-flex shrink-0 items-center justify-center bg-[#e8e8ed] ${toneClass} transition-colors active:scale-95 disabled:cursor-wait disabled:opacity-60 dark:bg-[#2d2d30] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]/40`}
+    >
+      {isSaving ? (
+        <Loader2 size={variant === 'compact' ? 13 : 15} className="animate-spin" aria-hidden="true" />
+      ) : (
+        <Heart size={variant === 'compact' ? 14 : 16} fill={isSaved ? 'currentColor' : 'none'} aria-hidden="true" />
+      )}
+    </button>
+  );
+};
+
+const TrackLibraryError = ({ error, variant }) => {
+  if (!error) return null;
+
+  const className = variant === 'player'
+    ? 'mt-2 text-center text-[11px] font-semibold text-red-600 dark:text-red-300'
+    : 'mt-2 text-[11px] font-semibold text-red-600 dark:text-red-300';
+
+  return <p className={className}>{error}</p>;
+};
+
+const QueueViewToggle = ({ playbackQueue, t }) => {
+  if (!playbackQueue?.isSupported) return null;
+
+  const items = [
+    { id: 'now', icon: Music, label: t('nowPlaying.viewNow') },
+    { id: 'queue', icon: ListOrdered, label: t('nowPlaying.viewQueue') },
+    { id: 'recent', icon: Clock3, label: t('nowPlaying.viewRecent') },
+  ];
+
+  return (
+    <div className="mt-4 flex justify-center">
+      <div className="inline-flex rounded-full border border-black/[0.05] bg-[#f5f5f7] p-1 dark:border-white/[0.06] dark:bg-[#2d2d30]">
+        {items.map(({ id, icon: Icon, label }) => {
+          const isActive = playbackQueue.view === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => playbackQueue.setView(id)}
+              aria-pressed={isActive}
+              aria-label={label}
+              title={label}
+              className={`inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]/40 ${
+                isActive
+                  ? 'bg-white text-[#0071e3] shadow-sm dark:bg-[#1d1d1f] dark:text-[#8ec8ff]'
+                  : 'text-[#6e6e73] hover:text-[#1d1d1f] dark:text-[#a1a1a6] dark:hover:text-[#f5f5f7]'
+              }`}
+            >
+              <Icon size={13} aria-hidden="true" />
+              <span className="hidden sm:inline">{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const PlaybackQueueRow = ({ item, meta, playbackActions, t }) => {
+  const track = item.track;
+  const trackId = getPlayableTrackId(item);
+  const isPending = Boolean(trackId && playbackActions?.pendingTrackId === trackId);
+  const canPlay = Boolean(trackId && playbackActions?.onPlayTrack);
+  const playTrack = () => {
+    if (!canPlay || isPending) return;
+    playbackActions.onPlayTrack(track || item).catch(() => {});
+  };
+
+  return (
+    <li className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-black/[0.03] dark:hover:bg-white/[0.04]">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-[#f0f0f2] dark:bg-[#161617]">
+        {item.albumCover ? (
+          <img src={item.albumCover} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <Music size={15} className="text-[#86868b]" aria-hidden="true" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
+          {track.name}
+        </p>
+        <p className="truncate text-[11px] font-semibold text-[#86868b]">
+          {track.artistNames || t('preview.unknownArtist')}
+        </p>
+      </div>
+      <span className="shrink-0 text-[10px] font-semibold text-[#86868b]">
+        {meta || formatDuration(item.durationMs)}
+      </span>
+      <button
+        type="button"
+        onClick={playTrack}
+        disabled={!canPlay || isPending}
+        aria-label={t('nowPlaying.playTrack', track.name)}
+        title={t('nowPlaying.playTrack', track.name)}
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0071e3] text-white transition-colors hover:bg-[#0077ed] disabled:cursor-wait disabled:bg-[#c7c7cc] dark:disabled:bg-[#545458] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]/40"
+      >
+        {isPending ? (
+          <Loader2 size={13} className="animate-spin" aria-hidden="true" />
+        ) : (
+          <Play size={13} className="translate-x-px" aria-hidden="true" />
+        )}
+      </button>
+    </li>
+  );
+};
+
+const formatPlayedAt = (playedAt) => {
+  if (!playedAt) return '';
+  const date = new Date(playedAt);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const PlaybackQueueList = ({ playbackActions, playbackQueue, t }) => {
+  if (!playbackQueue?.isSupported || playbackQueue.view === 'now') return null;
+
+  const isQueue = playbackQueue.view === 'queue';
+  const items = isQueue
+    ? playbackQueue.queue?.queue || []
+    : playbackQueue.recentlyPlayed?.items || [];
+  const emptyText = isQueue ? t('nowPlaying.queueEmpty') : t('nowPlaying.recentEmpty');
+  const title = isQueue ? t('nowPlaying.queue') : t('nowPlaying.recentlyPlayed');
+
+  return (
+    <div className="mt-4 animate-fade-in rounded-lg border border-[#e5e5e7] bg-[#fafafa] p-2 dark:border-[#333336]/60 dark:bg-[#161617]">
+      <div className="mb-1 flex items-center justify-between gap-2 px-2 py-1">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-[#86868b]">
+          {title}
+        </p>
+        <button
+          type="button"
+          onClick={() => playbackQueue.refresh(playbackQueue.view)}
+          disabled={playbackQueue.isLoading}
+          aria-label={t('nowPlaying.refreshQueue')}
+          title={t('nowPlaying.refreshQueue')}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-[#86868b] transition-colors hover:bg-[#e8e8ed] hover:text-[#1d1d1f] disabled:cursor-wait disabled:opacity-60 dark:hover:bg-[#2d2d30] dark:hover:text-[#f5f5f7] outline-none focus-visible:ring-2 focus-visible:ring-[#0071e3]/40"
+        >
+          {playbackQueue.isLoading ? (
+            <Loader2 size={13} className="animate-spin" aria-hidden="true" />
+          ) : (
+            <RefreshCw size={13} aria-hidden="true" />
+          )}
+        </button>
+      </div>
+
+      {playbackQueue.error && (
+        <p className="px-2 py-2 text-[11px] font-semibold text-red-600 dark:text-red-300">
+          {playbackQueue.error}
+        </p>
+      )}
+
+      {playbackActions?.error && (
+        <p className="px-2 py-2 text-[11px] font-semibold text-red-600 dark:text-red-300">
+          {playbackActions.error}
+        </p>
+      )}
+
+      {!isQueue && playbackQueue.hasOptimisticRecentItems && (
+        <p className="px-2 py-2 text-[11px] font-semibold leading-relaxed text-[#6e6e73] dark:text-[#a1a1a6]">
+          {t('nowPlaying.recentPendingNote')}
+        </p>
+      )}
+
+      {playbackQueue.isLoading && items.length === 0 ? (
+        <div className="flex items-center justify-center gap-2 px-3 py-8 text-xs font-semibold text-[#86868b]">
+          <Loader2 size={15} className="animate-spin text-[#0071e3]" aria-hidden="true" />
+          <span>{t('nowPlaying.loadingQueue')}</span>
+        </div>
+      ) : items.length === 0 ? (
+        <p className="px-3 py-8 text-center text-xs font-semibold text-[#86868b]">
+          {emptyText}
+        </p>
+      ) : (
+        <ul className="max-h-[260px] overflow-y-auto">
+          {items.slice(0, 20).map((item, index) => (
+            <PlaybackQueueRow
+              key={`${item.uri || item.id}-${item.playedAt || index}`}
+              item={item}
+              meta={isQueue ? String(index + 1) : formatPlayedAt(item.playedAt)}
+              playbackActions={playbackActions}
+              t={t}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
   );
 };
 
@@ -435,7 +662,7 @@ const PlaybackControls = ({
   );
 };
 
-const DefaultContent = ({ durationMs, nowPlaying, progressMs, t, track }) => (
+const DefaultContent = ({ durationMs, nowPlaying, progressMs, t, track, trackLibrary }) => (
   <div className="grid gap-4 md:grid-cols-[72px_1fr]">
     <NowPlayingArtwork
       albumCover={nowPlaying.albumCover}
@@ -447,10 +674,14 @@ const DefaultContent = ({ durationMs, nowPlaying, progressMs, t, track }) => (
     <div className="min-w-0">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <TrackInfo nowPlaying={nowPlaying} t={t} track={track} variant="default" />
-        <SpotifyLink href={nowPlaying.externalUrl} t={t} trackName={track.name} variant="default" />
+        <div className="flex shrink-0 items-center gap-2">
+          <SavedTrackButton t={t} track={track} trackLibrary={trackLibrary} variant="default" />
+          <SpotifyLink href={nowPlaying.externalUrl} t={t} trackName={track.name} variant="default" />
+        </div>
       </div>
 
       <ProgressMeter durationMs={durationMs} progressMs={progressMs} t={t} variant="default" />
+      <TrackLibraryError error={trackLibrary?.error} variant="default" />
       <PlaybackStateBadges nowPlaying={nowPlaying} t={t} variant="default" />
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-[#86868b]">
@@ -462,7 +693,7 @@ const DefaultContent = ({ durationMs, nowPlaying, progressMs, t, track }) => (
   </div>
 );
 
-const CompactContent = ({ durationMs, nowPlaying, progressMs, t, track }) => (
+const CompactContent = ({ durationMs, nowPlaying, progressMs, t, track, trackLibrary }) => (
   <div className="min-w-0">
     <div className="flex items-center gap-3">
       <NowPlayingArtwork
@@ -472,10 +703,14 @@ const CompactContent = ({ durationMs, nowPlaying, progressMs, t, track }) => (
         variant="compact"
       />
       <TrackInfo nowPlaying={nowPlaying} t={t} track={track} variant="compact" />
-      <SpotifyLink href={nowPlaying.externalUrl} t={t} trackName={track.name} variant="compact" />
+      <div className="flex shrink-0 items-center gap-1">
+        <SavedTrackButton t={t} track={track} trackLibrary={trackLibrary} variant="compact" />
+        <SpotifyLink href={nowPlaying.externalUrl} t={t} trackName={track.name} variant="compact" />
+      </div>
     </div>
 
     <ProgressMeter durationMs={durationMs} progressMs={progressMs} t={t} variant="compact" />
+    <TrackLibraryError error={trackLibrary?.error} variant="compact" />
     <PlaybackStateBadges nowPlaying={nowPlaying} t={t} variant="compact" />
   </div>
 );
@@ -487,40 +722,59 @@ const PlayerContent = ({
   controlPlayback,
   durationMs,
   nowPlaying,
+  playbackActions,
+  playbackQueue,
   progressMs,
   t,
   track,
-}) => (
-  <div className="min-w-0">
+  trackLibrary,
+}) => {
+  const isQueueView = playbackQueue?.isSupported && playbackQueue.view !== 'now';
+
+  return (
+    <div className="min-w-0">
     <NowPlayingArtwork
       albumCover={nowPlaying.albumCover}
+      condensed={isQueueView}
       trackName={track.name}
       t={t}
       variant="player"
     />
     <TrackInfo nowPlaying={nowPlaying} t={t} track={track} variant="player" />
+    <QueueViewToggle playbackQueue={playbackQueue} t={t} />
 
-    <ProgressMeter durationMs={durationMs} progressMs={progressMs} t={t} variant="player" />
-    <PlaybackControls
-      canControlPlayback={canControlPlayback}
-      controlError={controlError}
-      controlPending={controlPending}
-      controlPlayback={controlPlayback}
-      nowPlaying={nowPlaying}
-      t={t}
-    />
-    <PlaybackStateBadges nowPlaying={nowPlaying} t={t} variant="player" />
+    {isQueueView ? (
+      <PlaybackQueueList playbackActions={playbackActions} playbackQueue={playbackQueue} t={t} />
+    ) : (
+      <>
+        <ProgressMeter durationMs={durationMs} progressMs={progressMs} t={t} variant="player" />
+        <PlaybackControls
+          canControlPlayback={canControlPlayback}
+          controlError={controlError}
+          controlPending={controlPending}
+          controlPlayback={controlPlayback}
+          nowPlaying={nowPlaying}
+          t={t}
+        />
+        <PlaybackStateBadges nowPlaying={nowPlaying} t={t} variant="player" />
+      </>
+    )}
 
     <div className="mt-4 flex items-center justify-between gap-2">
       <span className="min-w-0 truncate rounded-lg bg-[#f5f5f7] px-2.5 py-1.5 text-[11px] font-semibold text-[#86868b] dark:bg-[#2d2d30]">
         {t('nowPlaying.isrc')}: {track.isrc || t('nowPlaying.notAvailable')}
       </span>
-      <SpotifyLink href={nowPlaying.externalUrl} t={t} trackName={track.name} variant="player" />
+      <div className="flex shrink-0 items-center gap-2">
+        <SavedTrackButton t={t} track={track} trackLibrary={trackLibrary} variant="player" />
+        <SpotifyLink href={nowPlaying.externalUrl} t={t} trackName={track.name} variant="player" />
+      </div>
     </div>
+    <TrackLibraryError error={trackLibrary?.error} variant="player" />
   </div>
-);
+  );
+};
 
-export const NowPlayingPanel = ({ playback, variant = 'default' }) => {
+export const NowPlayingPanel = ({ playback, playbackActions = null, playbackQueue = null, trackLibrary = null, variant = 'default' }) => {
   const { t } = useI18n();
   const {
     canControlPlayback,
@@ -561,9 +815,12 @@ export const NowPlayingPanel = ({ playback, variant = 'default' }) => {
       controlPending={controlPending}
       controlPlayback={controlPlayback}
       nowPlaying={nowPlaying}
+      playbackActions={playbackActions}
+      playbackQueue={playbackQueue}
       progressMs={displayProgressMs}
       t={t}
       track={track}
+      trackLibrary={trackLibrary}
     />
   ) : normalizedVariant === 'compact' ? (
     <CompactContent
@@ -572,6 +829,7 @@ export const NowPlayingPanel = ({ playback, variant = 'default' }) => {
       progressMs={displayProgressMs}
       t={t}
       track={track}
+      trackLibrary={trackLibrary}
     />
   ) : (
     <DefaultContent
@@ -580,13 +838,14 @@ export const NowPlayingPanel = ({ playback, variant = 'default' }) => {
       progressMs={displayProgressMs}
       t={t}
       track={track}
+      trackLibrary={trackLibrary}
     />
   );
 
   if (isPlayer) {
     return (
       <section className="w-full animate-fade-in-up">
-        <div className="rounded-lg border border-[#e5e5e7] bg-white p-4 shadow-sm dark:border-[#333336]/60 dark:bg-[#1d1d1f] dark:shadow-none">
+        <div className="min-h-[560px] rounded-lg border border-[#e5e5e7] bg-white p-4 shadow-sm dark:border-[#333336]/60 dark:bg-[#1d1d1f] dark:shadow-none lg:min-h-[640px]">
           {content}
         </div>
       </section>

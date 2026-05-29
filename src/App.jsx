@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { exporter } from './services/exporter';
 import { Header } from './components/Header';
 import { ProgressBar } from './components/ProgressBar';
 import { Footer } from './components/Footer';
@@ -13,10 +12,44 @@ import { useI18n } from './i18n';
 import { PlaylistPreviewModal } from './components/PlaylistPreviewModal';
 import { useThemePreference } from './hooks/useThemePreference.js';
 import { useNowPlaying } from './hooks/useNowPlaying.js';
+import { PLAYBACK_QUEUE_VIEWS, usePlaybackQueue } from './hooks/usePlaybackQueue.js';
 import { batchSession } from './services/batchSession.js';
 import { exportHistory, getTrackUrisFromSnapshot } from './services/exportHistory.js';
+import {
+  PLAYBACK_ACTION_FOLLOWUP_REFRESH_DELAY_MS,
+  PLAYBACK_ACTION_PRIMARY_REFRESH_DELAY_MS,
+  shouldFallbackToTrackPlayback,
+} from './services/playbackActions.js';
 import { DEFAULT_PROVIDER_ID, getMusicProvider } from './services/providers/providerRegistry.js';
 import { createProviderError, PROVIDER_ERROR_CODES } from './services/providers/musicProvider.js';
+
+const SPOTIFY_TRACK_URI_PREFIX = 'spotify:track:';
+const STATUS_MESSAGE_DISMISS_MS = 5000;
+const ERROR_MESSAGE_DISMISS_MS = 8000;
+
+const wait = (ms) => new Promise(resolve => {
+  window.setTimeout(resolve, ms);
+});
+
+const loadExporter = () => import('./services/exporter.js').then(module => module.exporter);
+
+const getTrackLibraryId = (trackRef = '') => {
+  if (!trackRef) return '';
+
+  const value = typeof trackRef === 'object'
+    ? trackRef.providerTrackId || trackRef.id || trackRef.uri || ''
+    : trackRef;
+  const text = String(value).trim();
+  if (!text) return '';
+
+  return text.startsWith(SPOTIFY_TRACK_URI_PREFIX)
+    ? text.slice(SPOTIFY_TRACK_URI_PREFIX.length)
+    : text;
+};
+
+const getTrackLibraryIds = (trackRefs = []) => (
+  Array.from(new Set(trackRefs.map(getTrackLibraryId).filter(Boolean)))
+);
 
 export default function App() {
   const { t } = useI18n();
@@ -34,11 +67,30 @@ export default function App() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [historySnapshots, setHistorySnapshots] = useState([]);
   const [latestDiff, setLatestDiff] = useState(null);
+  const [savedTrackIds, setSavedTrackIds] = useState(() => new Set());
+  const [savingTrackIds, setSavingTrackIds] = useState(() => new Set());
+  const [playbackTrackLibraryError, setPlaybackTrackLibraryError] = useState({ trackId: '', message: '' });
+  const [playTrackPendingId, setPlayTrackPendingId] = useState('');
+  const [playContextPendingUri, setPlayContextPendingUri] = useState('');
+  const [playTrackError, setPlayTrackError] = useState('');
   const [batchSessionState, setBatchSessionState] = useState(() => batchSession.read());
   const [confirmation, setConfirmation] = useState(null);
   const activeExportAbortRef = useRef(null);
+  const playbackRefreshTimeoutsRef = useRef([]);
   const { setTheme, themePreference } = useThemePreference();
   const currentProvider = useMemo(() => getMusicProvider(currentProviderId), [currentProviderId]);
+
+  useEffect(() => {
+    if (!statusMessage && !errorMessage) return undefined;
+
+    const dismissDelay = errorMessage ? ERROR_MESSAGE_DISMISS_MS : STATUS_MESSAGE_DISMISS_MS;
+    const timeoutId = window.setTimeout(() => {
+      setStatusMessage('');
+      setErrorMessage('');
+    }, dismissDelay);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [errorMessage, statusMessage]);
 
   // Single and batch export progress tracking
   const [exportingState, setExportingState] = useState({
@@ -93,18 +145,305 @@ export default function App() {
     getProviderErrorInfo(err).isCancelled
   ), [getProviderErrorInfo]);
 
-  const handleNowPlayingAuthExpired = useCallback((err) => {
+  const handleProviderAuthExpired = useCallback((err) => {
+    if (!isAuthExpiredError(err)) return;
+
     setIsLoggedIn(false);
     setStatusMessage('');
     setErrorMessage(getErrorText(err));
-  }, [getErrorText]);
+  }, [getErrorText, isAuthExpiredError]);
 
   const playbackState = useNowPlaying({
     enabled: isLoggedIn,
     provider: currentProvider,
     formatError: getErrorText,
-    onAuthExpired: handleNowPlayingAuthExpired,
+    onAuthExpired: handleProviderAuthExpired,
   });
+  const playbackQueue = usePlaybackQueue({
+    enabled: isLoggedIn,
+    formatError: getErrorText,
+    onAuthExpired: handleProviderAuthExpired,
+    provider: currentProvider,
+  });
+  const canUseTrackLibrary = Boolean(
+    isLoggedIn &&
+    currentProvider?.capabilities?.trackLibrary &&
+    currentProvider?.getSavedTrackIds &&
+    currentProvider?.saveTracks &&
+    currentProvider?.removeSavedTracks
+  );
+  const currentPlaybackTrack = playbackState?.nowPlaying?.isAvailable
+    ? playbackState.nowPlaying.track
+    : null;
+  const currentPlaybackTrackId = getTrackLibraryId(currentPlaybackTrack);
+  const playbackDeviceId = playbackState?.nowPlaying?.device?.id || '';
+  const refreshNowPlaying = playbackState?.fetchNowPlaying;
+
+  const clearPlaybackRefreshTimers = useCallback(() => {
+    playbackRefreshTimeoutsRef.current.forEach(timeoutId => window.clearTimeout(timeoutId));
+    playbackRefreshTimeoutsRef.current = [];
+  }, []);
+
+  useEffect(() => clearPlaybackRefreshTimers, [clearPlaybackRefreshTimers]);
+
+  const refreshPlaybackSurfaces = useCallback(async ({
+    playedTrackRef = null,
+    previousTrackId = '',
+  } = {}) => {
+    clearPlaybackRefreshTimers();
+    playbackQueue?.markRecentlyPlayed?.(playedTrackRef);
+    const playedTrackId = getTrackLibraryId(playedTrackRef);
+
+    const markRefreshedNowPlaying = (refreshedNowPlaying) => {
+      const refreshedTrack = refreshedNowPlaying?.isAvailable ? refreshedNowPlaying.track : null;
+      const refreshedTrackId = getTrackLibraryId(refreshedTrack);
+      if (!refreshedTrackId) return;
+      if (playedTrackId && refreshedTrackId !== playedTrackId) return;
+      if (!playedTrackId && previousTrackId && refreshedTrackId === previousTrackId) return;
+      playbackQueue?.markRecentlyPlayed?.(refreshedNowPlaying);
+    };
+
+    const refreshActiveSurfaces = async () => {
+      const refreshedNowPlaying = await refreshNowPlaying?.({ silent: true });
+      markRefreshedNowPlaying(refreshedNowPlaying);
+      if (playbackQueue?.view && playbackQueue.view !== PLAYBACK_QUEUE_VIEWS.now) {
+        await playbackQueue.refresh(playbackQueue.view);
+      }
+    };
+
+    await wait(PLAYBACK_ACTION_PRIMARY_REFRESH_DELAY_MS);
+    await refreshActiveSurfaces();
+
+    const timeoutId = window.setTimeout(() => {
+      refreshActiveSurfaces();
+    }, PLAYBACK_ACTION_FOLLOWUP_REFRESH_DELAY_MS);
+    playbackRefreshTimeoutsRef.current.push(timeoutId);
+  }, [
+    clearPlaybackRefreshTimers,
+    playbackQueue,
+    refreshNowPlaying,
+  ]);
+
+  const handlePlayTrack = useCallback(async (trackRef, playbackOptions = {}) => {
+    const trackId = getTrackLibraryId(trackRef);
+    if (!currentProvider?.playTrack || !trackId || playTrackPendingId === trackId) return;
+
+    setPlayTrackPendingId(trackId);
+    setPlayTrackError('');
+
+    try {
+      const targetDeviceId = playbackOptions.deviceId ?? playbackDeviceId;
+      if (playbackOptions.contextUri && currentProvider?.playContext) {
+        try {
+          await currentProvider.playContext(playbackOptions.contextUri, {
+            deviceId: targetDeviceId,
+            offsetUri: trackRef,
+            positionMs: playbackOptions.positionMs,
+          });
+        } catch (err) {
+          if (!shouldFallbackToTrackPlayback(getProviderErrorInfo(err))) {
+            throw err;
+          }
+          await currentProvider.playTrack(trackRef, {
+            deviceId: targetDeviceId,
+            positionMs: playbackOptions.positionMs,
+          });
+        }
+      } else {
+        await currentProvider.playTrack(trackRef, {
+          deviceId: targetDeviceId,
+          positionMs: playbackOptions.positionMs,
+        });
+      }
+      await refreshPlaybackSurfaces({
+        playedTrackRef: trackRef,
+        previousTrackId: currentPlaybackTrackId,
+      });
+    } catch (err) {
+      handleProviderAuthExpired(err);
+      setPlayTrackError(getErrorText(err));
+      throw err;
+    } finally {
+      setPlayTrackPendingId('');
+    }
+  }, [
+    currentProvider,
+    currentPlaybackTrackId,
+    getErrorText,
+    getProviderErrorInfo,
+    handleProviderAuthExpired,
+    playbackDeviceId,
+    playTrackPendingId,
+    refreshPlaybackSurfaces,
+  ]);
+
+  const handlePlayContext = useCallback(async (contextUri, playbackOptions = {}) => {
+    const normalizedContextUri = String(contextUri || '').trim();
+    if (!currentProvider?.playContext || !normalizedContextUri || playContextPendingUri === normalizedContextUri) return;
+
+    setPlayContextPendingUri(normalizedContextUri);
+    setPlayTrackError('');
+
+    try {
+      const targetDeviceId = playbackOptions.deviceId ?? playbackDeviceId;
+      await currentProvider.playContext(normalizedContextUri, {
+        deviceId: targetDeviceId,
+        positionMs: playbackOptions.positionMs,
+      });
+      await refreshPlaybackSurfaces({ previousTrackId: currentPlaybackTrackId });
+    } catch (err) {
+      handleProviderAuthExpired(err);
+      setPlayTrackError(getErrorText(err));
+      throw err;
+    } finally {
+      setPlayContextPendingUri('');
+    }
+  }, [
+    currentProvider,
+    currentPlaybackTrackId,
+    getErrorText,
+    handleProviderAuthExpired,
+    playContextPendingUri,
+    playbackDeviceId,
+    refreshPlaybackSurfaces,
+  ]);
+
+  const playbackActions = useMemo(() => ({
+    error: playTrackError,
+    onPlayContext: handlePlayContext,
+    onPlayTrack: handlePlayTrack,
+    pendingContextUri: playContextPendingUri,
+    pendingTrackId: playTrackPendingId,
+  }), [handlePlayContext, handlePlayTrack, playContextPendingUri, playTrackError, playTrackPendingId]);
+
+  const loadSavedTrackIds = useCallback(async (trackRefs = [], options = {}) => {
+    const trackIds = getTrackLibraryIds(trackRefs);
+    if (!canUseTrackLibrary || trackIds.length === 0) return [];
+
+    try {
+      const savedIds = await currentProvider.getSavedTrackIds(trackRefs, options);
+      setSavedTrackIds(current => {
+        const next = new Set(current);
+        trackIds.forEach(id => next.delete(id));
+        savedIds.forEach(id => next.add(id));
+        return next;
+      });
+      return savedIds;
+    } catch (err) {
+      if (isCancelledError(err)) return [];
+      handleProviderAuthExpired(err);
+      throw err;
+    }
+  }, [canUseTrackLibrary, currentProvider, handleProviderAuthExpired, isCancelledError]);
+
+  const toggleSavedTrack = useCallback(async (trackRef) => {
+    const trackId = getTrackLibraryId(trackRef);
+    if (!canUseTrackLibrary || !trackId || savingTrackIds.has(trackId)) return savedTrackIds.has(trackId);
+
+    const wasSaved = savedTrackIds.has(trackId);
+    setSavingTrackIds(current => new Set(current).add(trackId));
+
+    try {
+      if (wasSaved) {
+        await currentProvider.removeSavedTracks([trackRef]);
+      } else {
+        await currentProvider.saveTracks([trackRef]);
+      }
+
+      setSavedTrackIds(current => {
+        const next = new Set(current);
+        if (wasSaved) {
+          next.delete(trackId);
+        } else {
+          next.add(trackId);
+        }
+        return next;
+      });
+      return !wasSaved;
+    } catch (err) {
+      handleProviderAuthExpired(err);
+      throw err;
+    } finally {
+      setSavingTrackIds(current => {
+        const next = new Set(current);
+        next.delete(trackId);
+        return next;
+      });
+    }
+  }, [canUseTrackLibrary, currentProvider, handleProviderAuthExpired, savedTrackIds, savingTrackIds]);
+
+  useEffect(() => {
+    if (!canUseTrackLibrary || !currentPlaybackTrackId) return undefined;
+
+    const abortController = new AbortController();
+    const refreshId = window.setTimeout(() => {
+      loadSavedTrackIds([currentPlaybackTrackId], { signal: abortController.signal })
+        .then(() => {
+          setPlaybackTrackLibraryError(current => (
+            current.trackId === currentPlaybackTrackId
+              ? { trackId: '', message: '' }
+              : current
+          ));
+        })
+        .catch(err => {
+          if (isCancelledError(err)) return;
+          setPlaybackTrackLibraryError({
+            trackId: currentPlaybackTrackId,
+            message: getErrorText(err) || t('nowPlaying.savedLoadFailed'),
+          });
+        });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(refreshId);
+      abortController.abort();
+    };
+  }, [canUseTrackLibrary, currentPlaybackTrackId, getErrorText, isCancelledError, loadSavedTrackIds, t]);
+
+  const handleTogglePlaybackSavedTrack = useCallback(async (track) => {
+    const trackId = getTrackLibraryId(track);
+    setPlaybackTrackLibraryError({ trackId, message: '' });
+    try {
+      await toggleSavedTrack(track);
+    } catch (err) {
+      if (isCancelledError(err)) return;
+      setPlaybackTrackLibraryError({
+        trackId,
+        message: getErrorText(err) || t('nowPlaying.savedActionFailed'),
+      });
+    }
+  }, [getErrorText, isCancelledError, t, toggleSavedTrack]);
+
+  const playbackTrackLibrary = useMemo(() => ({
+    canSaveTracks: canUseTrackLibrary && Boolean(currentPlaybackTrackId),
+    error: playbackTrackLibraryError.trackId === currentPlaybackTrackId
+      ? playbackTrackLibraryError.message
+      : '',
+    isSaved: currentPlaybackTrackId ? savedTrackIds.has(currentPlaybackTrackId) : false,
+    isSaving: currentPlaybackTrackId ? savingTrackIds.has(currentPlaybackTrackId) : false,
+    onToggleSaved: handleTogglePlaybackSavedTrack,
+  }), [
+    canUseTrackLibrary,
+    currentPlaybackTrackId,
+    handleTogglePlaybackSavedTrack,
+    playbackTrackLibraryError,
+    savedTrackIds,
+    savingTrackIds,
+  ]);
+
+  const playlistTrackLibrary = useMemo(() => ({
+    canSaveTracks: canUseTrackLibrary,
+    loadSavedTrackIds,
+    savedTrackIds,
+    savingTrackIds,
+    toggleSavedTrack,
+  }), [
+    canUseTrackLibrary,
+    loadSavedTrackIds,
+    savedTrackIds,
+    savingTrackIds,
+    toggleSavedTrack,
+  ]);
 
   const loadPlaylists = useCallback(async () => {
     setIsLoadingPlaylists(true);
@@ -171,6 +510,9 @@ export default function App() {
     setIsLoggedIn(false);
     setPlaylists([]);
     setSelectedPlaylistIds(new Set());
+    setSavedTrackIds(new Set());
+    setSavingTrackIds(new Set());
+    setPlaybackTrackLibraryError({ trackId: '', message: '' });
     setActiveTool('library');
     setErrorMessage('');
     setStatusMessage('');
@@ -300,6 +642,7 @@ export default function App() {
       
       if (tracks.length > 0) {
         await recordSnapshot(playlist, tracks);
+        const exporter = await loadExporter();
         exporter.exportCSV(playlist.name, tracks);
       } else {
         setErrorMessage(t('error.noTracks', playlist.name));
@@ -405,6 +748,7 @@ export default function App() {
       }));
 
       if (playlistsWithTracks.length > 0) {
+        const exporter = await loadExporter();
         await exporter.exportZIP(playlistsWithTracks);
       }
 
@@ -609,10 +953,13 @@ export default function App() {
                     onDeleteHistory={deleteHistorySnapshot}
                     onExportHistory={exportLocalHistory}
                     onImportHistory={importLocalHistory}
+                    onProviderAuthExpired={handleProviderAuthExpired}
                     onRestorePlaylist={handleRestorePlaylist}
                     onRestoreSnapshot={handleRestoreSnapshot}
                     onToolChange={setActiveTool}
                     playback={playbackState}
+                    playbackActions={playbackActions}
+                    provider={currentProvider}
                     onPreview={(playlist) => {
                       setPreviewPlaylist(playlist);
                       setIsPreviewOpen(true);
@@ -621,7 +968,10 @@ export default function App() {
                 )}
                 inspector={(
                   <PlaybackPanel
+                    playbackActions={playbackActions}
+                    playbackQueue={playbackQueue}
                     playback={playbackState}
+                    trackLibrary={playbackTrackLibrary}
                   />
                 )}
               />
@@ -676,10 +1026,14 @@ export default function App() {
       </div>
 
       <PlaylistPreviewModal 
+        formatError={getErrorText}
         isOpen={isPreviewOpen} 
+        onAuthExpired={handleProviderAuthExpired}
         onClose={() => setIsPreviewOpen(false)} 
         playlist={previewPlaylist} 
+        playbackActions={playbackActions}
         provider={currentProvider}
+        trackLibrary={playlistTrackLibrary}
       />
       <ConfirmDialog
         isOpen={Boolean(confirmation)}
